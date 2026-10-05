@@ -8,7 +8,7 @@ Plataforma de adopción y cuidado de mascotas en la nube — proyecto final de l
 
 ## Descripción
 
-PawCloud centraliza el catálogo de mascotas en adopción de refugios y rescatistas, permite filtrar por especie, tamaño y compatibilidad, gestiona solicitudes de adopción, y da seguimiento post-adopción (vacunas y citas veterinarias).
+PawCloud centraliza el catálogo de mascotas en adopción de refugios y rescatistas, permite filtrar por especie, tamaño y compatibilidad, gestiona solicitudes de adopción con cuentas verificadas, y da seguimiento post-adopción (vacunas y citas veterinarias).
 
 ## Demo en vivo
 
@@ -17,15 +17,19 @@ PawCloud centraliza el catálogo de mascotas en adopción de refugios y rescatis
 ## Stack
 
 - HTML, CSS y JavaScript (sin framework)
-- Hospedado en Netlify (CDN automático)
+- Hospedado en Netlify (CDN automático, CI/CD conectado a este repo)
+- Próximo: base de datos y autenticación real con Supabase
 
 ## Estado del proyecto
 
 - [x] Investigación de usuarios (personas, escenarios, benchmarking)
 - [x] Prototipo interactivo de alta fidelidad
 - [x] Encuesta de evaluación de diseño (86 respuestas)
+- [x] Registro e inicio de sesión con roles (adoptante / refugio), navegación diferenciada
+- [x] Flujo de verificación simulado para cuentas de refugio
+- [x] Código versionado en GitHub con despliegue continuo (Netlify)
+- [ ] Base de datos real y autenticación con Supabase
+- [ ] Rol de administrador (supervisión de refugios y verificaciones)
 - [ ] Evaluación heurística formal
 - [ ] Pruebas con usuarios dirigidas
-- [ ] Login y roles diferenciados (adoptante / refugio)
 - [ ] Pantalla de inicio
-- [ ] CI/CD con GitHub → Netlify
