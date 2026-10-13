@@ -33,6 +33,7 @@ jobs:
         run: |
           mkdir dist
           cp index.html dist/
+          cp -r images dist/
       - name: Ejecutar Lighthouse CI
         uses: treosh/lighthouse-ci-action@v12
         with:
