@@ -107,3 +107,20 @@ test("el inicio de sesión rechaza contraseñas incorrectas", () => {
   win.handleLogin(fakeEvent);
   assert.equal(activeScreen(), "catalogo");
 });
+
+test("las fotos de las mascotas son archivos aparte, no van incrustadas en el HTML", () => {
+  assert.ok(html.length < 100000, "index.html pesa demasiado; las fotos deben cargarse desde images/");
+  assert.doesNotMatch(html, /data:image\/jpeg;base64/);
+  const fotos = [...doc.querySelectorAll("#pet-grid .pet-card img")].map((i) => i.getAttribute("src"));
+  assert.equal(fotos.length, 10);
+  fotos.forEach((src) => {
+    assert.match(src, /^images\/[a-z]+\.jpg$/);
+    assert.ok(fs.existsSync(path.join(__dirname, "..", src)), `falta el archivo ${src}`);
+  });
+});
+
+test("la ficha usa la foto de la mascota elegida", () => {
+  win.continueAsGuest();
+  win.openPet("sol");
+  assert.equal(doc.getElementById("ficha-photo").getAttribute("src"), "images/golden.jpg");
+});
