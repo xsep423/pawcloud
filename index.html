@@ -223,7 +223,7 @@
 
         <form id="login-form" class="card auth-form" onsubmit="handleLogin(event)">
           <label>Correo electrónico <input id="login-email" type="email" required></label>
-          <label>Contraseña <input id="login-password" type="password" required></label>
+          <label>Contraseña <input id="login-password" type="password" autocomplete="current-password" required></label>
           <p class="auth-error" id="login-error"></p>
           <button class="btn btn-primary" type="submit">Entrar</button>
         </form>
@@ -231,7 +231,7 @@
         <form id="register-form" class="card auth-form" style="display:none;" onsubmit="handleRegister(event)">
           <label>Nombre completo <input id="reg-name" type="text" required></label>
           <label>Correo electrónico <input id="reg-email" type="email" required></label>
-          <label>Contraseña <input id="reg-password" type="password" minlength="6" required></label>
+          <label>Contraseña <input id="reg-password" type="password" minlength="6" autocomplete="new-password" required></label>
           <div class="account-type">
             <label class="radio-opt"><input type="radio" name="reg-role" value="adoptante" checked onchange="toggleOrgField()"> Quiero adoptar una mascota</label>
             <label class="radio-opt"><input type="radio" name="reg-role" value="refugio" onchange="toggleOrgField()"> Soy un refugio u organización</label>
@@ -333,10 +333,10 @@
   <section class="screen" id="ficha">
     <div class="detail">
       <div>
-        <img id="ficha-photo" class="detail-photo" src="" alt="">
+        <img id="ficha-photo" class="detail-photo" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Foto de la mascota">
       </div>
       <div class="detail-body">
-        <h2 id="ficha-name"></h2>
+        <h2 id="ficha-name">Mascota</h2>
         <p class="pet-meta" id="ficha-refuge"></p>
         <div class="fact-row" id="ficha-facts"></div>
         <p id="ficha-desc" style="max-width:52ch; line-height:1.6;"></p>

@@ -17,19 +17,33 @@ PawCloud centraliza el catálogo de mascotas en adopción de refugios y rescatis
 ## Stack
 
 - HTML, CSS y JavaScript (sin framework)
-- Hospedado en Netlify (CDN automático, CI/CD conectado a este repo)
+- Hospedado en Netlify (CDN automático, desplegado desde este repositorio)
+- Integración continua con GitHub Actions
 - Próximo: base de datos y autenticación real con Supabase
+
+## Pipeline de integración continua
+
+Cada push a `main` y cada pull request ejecutan `.github/workflows/ci.yml`:
+
+1. **Validación de HTML** (`npm run lint`, con html-validate).
+2. **Pruebas de flujo** (`npm test`): catálogo, filtros, acceso como invitado, registro de adoptante y refugio, e inicio de sesión.
+3. **Lighthouse CI**: mide rendimiento, accesibilidad, buenas prácticas y SEO (umbrales configurados en `lighthouserc.json`).
+
+Netlify genera además una vista previa pública (staging) por cada pull request y publica en producción al integrar a `main`.
+
+Para correrlo en local: `npm install`, `npm run lint` y `npm test`.
 
 ## Estado del proyecto
 
 - [x] Investigación de usuarios (personas, escenarios, benchmarking)
 - [x] Prototipo interactivo de alta fidelidad
 - [x] Encuesta de evaluación de diseño (86 respuestas)
-- [x] Registro e inicio de sesión con roles (adoptante / refugio), navegación diferenciada
-- [x] Flujo de verificación simulado para cuentas de refugio
+- [x] Registro e inicio de sesión con roles (adoptante / refugio), simulado en el navegador
 - [x] Código versionado en GitHub con despliegue continuo (Netlify)
+- [x] Validación automática, pruebas de flujo y Lighthouse en CI
 - [ ] Base de datos real y autenticación con Supabase
 - [ ] Rol de administrador (supervisión de refugios y verificaciones)
+- [ ] Panel de publicación de mascotas y mapa de centros de ayuda y veterinarios
 - [ ] Evaluación heurística formal
 - [ ] Pruebas con usuarios dirigidas
 - [ ] Pantalla de inicio
