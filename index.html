@@ -79,6 +79,7 @@
     border:1.5px solid var(--ink); border-radius:999px; padding:6px 14px; font-size:13px;
     font-weight:600; cursor:pointer; background:var(--card); color:var(--ink);
   }
+  .chip{font-family:var(--font-body);}
   .chip.on{background:var(--ink); color:var(--paper);}
   .empty-msg{display:none; color:var(--ink-soft); font-size:14px; padding:20px 0;}
 
@@ -184,13 +185,36 @@
   .fine-print{ font-size:11.5px; color:var(--ink-soft); margin-top:14px; }
 
   ::selection{background:var(--mustard); color:var(--ink);}
+
+  /* v3: Supabase, roles nuevos, moderación, toast */
+  .role-pill.rescatista{background:#7A5C8C; color:#fff;}
+  .role-pill.admin{background:var(--ink); color:var(--paper);}
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--ink); color:var(--paper); padding:12px 20px; border-radius:var(--radius);
+    font-size:14px; font-weight:600; max-width:90vw; pointer-events:none; transition:opacity .25s, transform .25s; z-index:50;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%);}
+  .config-warn{display:none; background:#F4E3BE; color:#6B4E12; border:1.5px solid var(--mustard); border-radius:var(--radius); padding:10px 14px; font-size:13px; font-weight:600; margin-bottom:16px; text-align:left;}
+  .loading-msg{color:var(--ink-soft); font-size:14px; padding:20px 0;}
+  .badge{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700;}
+  .badge.pendiente{background:var(--mustard); color:var(--ink);}
+  .badge.aprobada,.badge.aceptada{background:var(--forest); color:#fff;}
+  .badge.rechazada{background:var(--clay); color:#fff;}
+  .section-title{font-family:var(--font-head); font-weight:600; font-size:20px; margin:0 0 10px;}
+  .req-item img{width:44px; height:44px; object-fit:cover; border-radius:var(--radius); flex:none;}
+  .req-info{flex:1; min-width:0;}
+  .req-info small{display:block; color:var(--ink-soft); font-size:12px;}
+  .list-empty{color:var(--ink-soft); font-size:14px; padding:10px 0;}
+  .photo-hint{font-size:12px; color:var(--ink-soft); font-weight:500;}
+  .account-type .radio-opt small{color:var(--ink-soft);}
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 40 40" fill="none">
+    <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <circle cx="20" cy="20" r="19" stroke="var(--ink)" stroke-width="2"/>
       <circle cx="14" cy="15" r="3.4" fill="var(--forest)"/>
       <circle cx="26" cy="15" r="3.4" fill="var(--forest)"/>
@@ -209,7 +233,7 @@
   <section class="screen active" id="auth">
     <div class="login-wrap">
       <div class="login-card">
-        <svg width="46" height="46" viewBox="0 0 40 40" fill="none" style="margin:0 auto;">
+        <svg width="46" height="46" viewBox="0 0 40 40" fill="none" style="margin:0 auto;" aria-hidden="true">
           <circle cx="20" cy="20" r="19" stroke="var(--ink)" stroke-width="2"/>
           <circle cx="14" cy="15" r="3.4" fill="var(--forest)"/>
           <circle cx="26" cy="15" r="3.4" fill="var(--forest)"/>
@@ -219,6 +243,7 @@
         </svg>
         <h2>Bienvenido a PawCloud</h2>
         <p id="auth-subtitle">Inicia sesión o crea una cuenta para continuar.</p>
+        <div class="config-warn" id="config-warn">La conexión con la base de datos no está configurada todavía. Pega tu URL y tu anon key de Supabase en el bloque de configuración de index.html.</div>
 
         <div class="auth-tabs">
           <button type="button" class="auth-tab on" data-tab="login" onclick="switchAuthTab('login')">Iniciar sesión</button>
@@ -226,29 +251,30 @@
         </div>
 
         <form id="login-form" class="card auth-form" onsubmit="handleLogin(event)">
-          <label>Correo electrónico <input id="login-email" type="email" required></label>
+          <label>Correo electrónico <input id="login-email" type="email" autocomplete="email" required></label>
           <label>Contraseña <input id="login-password" type="password" autocomplete="current-password" required></label>
-          <p class="auth-error" id="login-error"></p>
+          <p class="auth-error" id="login-error" role="alert"></p>
           <button class="btn btn-primary" type="submit">Entrar</button>
         </form>
 
         <form id="register-form" class="card auth-form" style="display:none;" onsubmit="handleRegister(event)">
-          <label>Nombre completo <input id="reg-name" type="text" required></label>
-          <label>Correo electrónico <input id="reg-email" type="email" required></label>
+          <label>Nombre completo <input id="reg-name" type="text" autocomplete="name" required></label>
+          <label>Correo electrónico <input id="reg-email" type="email" autocomplete="email" required></label>
           <label>Contraseña <input id="reg-password" type="password" minlength="6" autocomplete="new-password" required></label>
           <div class="account-type">
             <label class="radio-opt"><input type="radio" name="reg-role" value="adoptante" checked onchange="toggleOrgField()"> Quiero adoptar una mascota</label>
+            <label class="radio-opt"><input type="radio" name="reg-role" value="rescatista" onchange="toggleOrgField()"> Soy rescatista o particular y quiero dar una mascota en adopción</label>
             <label class="radio-opt"><input type="radio" name="reg-role" value="refugio" onchange="toggleOrgField()"> Soy un refugio u organización</label>
           </div>
           <label id="org-field" style="display:none;">Nombre del refugio/organización <input id="reg-org" type="text" placeholder="Ej. Refugio Huellas de Tijuana"></label>
-          <p class="auth-error" id="register-error"></p>
+          <p class="auth-error" id="register-error" role="alert"></p>
           <button class="btn btn-primary" type="submit">Crear cuenta</button>
         </form>
 
         <div class="guest-link">
-          <button class="link-btn" onclick="continueAsGuest()">Seguir explorando sin cuenta →</button>
+          <button type="button" class="link-btn" onclick="continueAsGuest()">Seguir explorando sin cuenta →</button>
         </div>
-        <p class="fine-print">Verificamos cada cuenta para proteger a las mascotas: a los adoptantes les pedimos confirmar sus datos antes de enviar una solicitud, y las cuentas de refugio pasan por una revisión antes de poder publicar.</p>
+        <p class="fine-print">Cuidamos a las mascotas: los refugios son verificados por un administrador, y las publicaciones de particulares se revisan antes de aparecer en el catálogo.</p>
       </div>
     </div>
   </section>
@@ -258,78 +284,18 @@
     <div class="hero">
       <div>
         <h2>Encuentra a tu compañero</h2>
-        <p>Mascotas verificadas de refugios y rescatistas cerca de ti, listas para un hogar.</p>
+        <p>Mascotas de refugios y rescatistas cerca de ti, listas para un hogar.</p>
       </div>
     </div>
     <div class="chips" id="chips">
-      <span class="chip on" data-filter="todos">Todos</span>
-      <span class="chip" data-filter="perro">Perros</span>
-      <span class="chip" data-filter="gato">Gatos</span>
-      <span class="chip" data-filter="pequeno">Pequeño</span>
-      <span class="chip" data-filter="depto">Apto depto</span>
+      <button type="button" class="chip on" data-filter="todos">Todos</button>
+      <button type="button" class="chip" data-filter="perro">Perros</button>
+      <button type="button" class="chip" data-filter="gato">Gatos</button>
+      <button type="button" class="chip" data-filter="pequeno">Pequeño</button>
+      <button type="button" class="chip" data-filter="depto">Apto depto</button>
     </div>
-    <div class="grid" id="pet-grid">
-      <article class="pet-card" data-species="perro" data-size="mediano" data-depto="0" onclick="openPet('rex')">
-        <span class="tag">Nuevo</span>
-        <img class="avatar-img" alt="Rex" src="images/beagle.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Rex</h3>
-        <p class="pet-meta">Perro · Mediano · 2 años</p>
-      </article>
-      <article class="pet-card" data-species="gato" data-size="pequeno" data-depto="1" onclick="openPet('mia')">
-        
-        <img class="avatar-img" alt="Mía" src="images/siamese.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Mía</h3>
-        <p class="pet-meta">Gata · Pequeña · 1 año</p>
-      </article>
-      <article class="pet-card" data-species="perro" data-size="pequeno" data-depto="1" onclick="openPet('toby')">
-        
-        <img class="avatar-img" alt="Toby" src="images/pug.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Toby</h3>
-        <p class="pet-meta">Perro · Pequeño · 4 años</p>
-      </article>
-      <article class="pet-card" data-species="gato" data-size="mediano" data-depto="1" onclick="openPet('luna')">
-        
-        <img class="avatar-img" alt="Luna" src="images/tigercat.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Luna</h3>
-        <p class="pet-meta">Gata · Mediana · 3 años</p>
-      </article>
-      <article class="pet-card" data-species="perro" data-size="pequeno" data-depto="1" onclick="openPet('nube')">
-        <span class="tag">Nuevo</span>
-        <img class="avatar-img" alt="Nube" src="images/chihuahua.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Nube</h3>
-        <p class="pet-meta">Perro · Pequeño · 1 año</p>
-      </article>
-      <article class="pet-card" data-species="perro" data-size="grande" data-depto="0" onclick="openPet('sol')">
-        
-        <img class="avatar-img" alt="Sol" src="images/golden.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Sol</h3>
-        <p class="pet-meta">Perro · Grande · 3 años</p>
-      </article>
-      <article class="pet-card" data-species="gato" data-size="mediano" data-depto="1" onclick="openPet('coco')">
-        
-        <img class="avatar-img" alt="Coco" src="images/persian.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Coco</h3>
-        <p class="pet-meta">Gata · Mediana · 2 años</p>
-      </article>
-      <article class="pet-card" data-species="perro" data-size="grande" data-depto="0" onclick="openPet('thor')">
-        
-        <img class="avatar-img" alt="Thor" src="images/shepherd.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Thor</h3>
-        <p class="pet-meta">Perro · Grande · 4 años</p>
-      </article>
-      <article class="pet-card" data-species="gato" data-size="pequeno" data-depto="1" onclick="openPet('cleo')">
-        
-        <img class="avatar-img" alt="Cleo" src="images/egyptian.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Cleo</h3>
-        <p class="pet-meta">Gata · Pequeña · 2 años</p>
-      </article>
-      <article class="pet-card" data-species="perro" data-size="grande" data-depto="0" onclick="openPet('nieve')">
-        <span class="tag">Nuevo</span>
-        <img class="avatar-img" alt="Nieve" src="images/husky.jpg" loading="lazy" decoding="async" width="360" height="360">
-        <h3>Nieve</h3>
-        <p class="pet-meta">Perro · Grande · 2 años</p>
-      </article>
-    </div>
+    <p class="loading-msg" id="catalog-loading" style="display:none;">Cargando mascotas…</p>
+    <div class="grid" id="pet-grid"></div>
     <p class="empty-msg" id="empty-msg">No hay mascotas que coincidan con este filtro por ahora.</p>
   </section>
 
@@ -344,298 +310,543 @@
         <p class="pet-meta" id="ficha-refuge"></p>
         <div class="fact-row" id="ficha-facts"></div>
         <p id="ficha-desc" style="max-width:52ch; line-height:1.6;"></p>
-        <button class="btn btn-primary" onclick="goToSolicitud()">Solicitar adopción</button>
+        <button type="button" class="btn btn-primary" onclick="goToSolicitud()">Solicitar adopción</button>
       </div>
     </div>
   </section>
 
   <!-- SOLICITUD -->
   <section class="screen" id="solicitud">
-    <div class="hero"><div><h2>Solicitud de adopción</h2><p>Cuéntale al refugio sobre ti para que puedan conocerte antes de decidir.</p></div></div>
-    <form class="card" onsubmit="event.preventDefault(); alert('Solicitud enviada al refugio.'); showScreen('catalogo');">
+    <div class="hero"><div><h2>Solicitud de adopción</h2><p id="solicitud-sub">Cuéntale a quien la cuida sobre ti para que puedan conocerte antes de decidir.</p></div></div>
+    <form class="card" id="solicitud-form" onsubmit="handleSolicitud(event)">
       <label>Nombre completo <input id="solicitud-nombre" type="text" placeholder="Tu nombre" required></label>
       <label>Tipo de vivienda
-        <select><option>Casa con patio</option><option>Departamento</option><option>Casa sin patio</option></select>
+        <select id="solicitud-vivienda"><option>Casa con patio</option><option>Departamento</option><option>Casa sin patio</option></select>
       </label>
-      <label>¿Tienes otras mascotas? <input type="text" placeholder="Ej. un gato de 5 años"></label>
-      <label>Cuéntanos por qué quieres adoptar <textarea placeholder="Escribe aquí..."></textarea></label>
-      <label class="checkbox-row"><input type="checkbox" required> Confirmo que mis datos son verídicos y que podré cuidar responsablemente de esta mascota.</label>
+      <label>¿Tienes otras mascotas? <input id="solicitud-otras" type="text" placeholder="Ej. un gato de 5 años"></label>
+      <label>Cuéntanos por qué quieres adoptar <textarea id="solicitud-mensaje" placeholder="Escribe aquí..."></textarea></label>
+      <label class="checkbox-row"><input type="checkbox" id="solicitud-ok" required> Confirmo que mis datos son verídicos y que podré cuidar responsablemente de esta mascota.</label>
+      <p class="auth-error" id="solicitud-error" role="alert"></p>
       <button class="btn btn-primary" type="submit">Enviar solicitud</button>
     </form>
   </section>
 
-  <!-- PANEL REFUGIO -->
-  <section class="screen" id="refugio">
-    <div class="hero"><div><h2>Panel del refugio</h2><p id="refugio-subtitle">Refugio Huellas de Tijuana</p></div>
-      <button class="btn btn-primary" id="publish-btn">Publicar mascota</button>
+  <!-- PANEL REFUGIO / RESCATISTA -->
+  <section class="screen" id="panel">
+    <div class="hero"><div><h2 id="panel-title">Mi panel</h2><p id="panel-subtitle"></p></div>
+      <button type="button" class="btn btn-primary" id="publish-btn" onclick="showScreen('publicar')">Publicar mascota</button>
     </div>
     <div class="verify-banner" id="verify-banner"></div>
-    <div class="stat-row">
-      <div class="stat"><b>12</b><span>Mascotas publicadas</span></div>
-      <div class="stat"><b>5</b><span>Adoptadas este mes</span></div>
-      <div class="stat"><b>3</b><span>Solicitudes pendientes</span></div>
-    </div>
+    <div class="stat-row" id="panel-stats"></div>
     <div class="panel-grid">
       <div>
-        <h3 style="font-family:var(--font-head); font-weight:600;">Solicitudes recibidas</h3>
-        <div class="req-item">
-          <div><b>Mariana G.</b> — quiere adoptar a <b>Rex</b></div>
-          <div class="req-actions"><button class="accept">Aceptar</button><button class="decline">Rechazar</button></div>
-        </div>
-        <div class="req-item">
-          <div><b>Luis P.</b> — quiere adoptar a <b>Mía</b></div>
-          <div class="req-actions"><button class="accept">Aceptar</button><button class="decline">Rechazar</button></div>
-        </div>
-        <div class="req-item">
-          <div><b>Ana R.</b> — quiere adoptar a <b>Toby</b></div>
-          <div class="req-actions"><button class="accept">Aceptar</button><button class="decline">Rechazar</button></div>
-        </div>
+        <h3 class="section-title">Solicitudes recibidas</h3>
+        <div id="panel-requests"></div>
       </div>
       <div>
-        <h3 style="font-family:var(--font-head); font-weight:600;">Mascotas activas</h3>
-        <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px;" id="refugio-mini"></div>
+        <h3 class="section-title">Mis publicaciones</h3>
+        <div id="panel-pets"></div>
       </div>
     </div>
   </section>
 
-  <!-- SEGUIMIENTO -->
+  <!-- PUBLICAR -->
+  <section class="screen" id="publicar">
+    <div class="hero"><div><h2>Publicar una mascota</h2><p id="publicar-sub">Comparte los datos de la mascota. Un administrador revisa las publicaciones de particulares antes de mostrarlas.</p></div></div>
+    <form class="card" id="publicar-form" onsubmit="handlePublicar(event)">
+      <label>Nombre <input id="pub-name" type="text" required maxlength="40"></label>
+      <label>Especie
+        <select id="pub-species"><option value="perro">Perro</option><option value="gato">Gato</option></select>
+      </label>
+      <label>Tamaño
+        <select id="pub-size"><option value="pequeno">Pequeño</option><option value="mediano" selected>Mediano</option><option value="grande">Grande</option></select>
+      </label>
+      <label>Edad aproximada <input id="pub-age" type="text" required placeholder="Ej. 2 años" maxlength="20"></label>
+      <label class="checkbox-row"><input type="checkbox" id="pub-depto"> Se adapta a vivir en departamento</label>
+      <label>Descripción <textarea id="pub-desc" required maxlength="500" placeholder="Carácter, salud, dónde fue rescatada..."></textarea></label>
+      <label>Foto <input id="pub-photo" type="file" accept="image/*"> <span class="photo-hint">Opcional. Máximo 3 MB.</span></label>
+      <p class="auth-error" id="publicar-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit" id="publicar-submit">Publicar</button>
+    </form>
+  </section>
+
+  <!-- SEGUIMIENTO (adoptante) -->
   <section class="screen" id="seguimiento">
-    <div class="hero"><div><h2>Mis mascotas adoptadas</h2><p>Seguimiento de salud de Luna, adoptada el 12 de agosto de 2026</p></div></div>
+    <div class="hero"><div><h2>Mis solicitudes</h2><p>Aquí ves el estado de cada adopción que pediste.</p></div></div>
+    <div id="my-requests"></div>
+    <h3 class="section-title" style="margin-top:32px;">Seguimiento de salud (ejemplo)</h3>
     <table>
       <thead><tr><th>Evento</th><th>Fecha</th><th>Estado</th></tr></thead>
       <tbody>
         <tr><td>Vacuna antirrábica</td><td>12 sep 2026</td><td><span class="status done">Aplicada</span></td></tr>
-        <tr><td>Revisión general</td><td>3 oct 2026</td><td><span class="status soon">En 9 días</span></td></tr>
+        <tr><td>Revisión general</td><td>3 oct 2026</td><td><span class="status soon">Próxima</span></td></tr>
         <tr><td>Refuerzo triple felina</td><td>18 nov 2026</td><td><span class="status soon">Programada</span></td></tr>
       </tbody>
     </table>
-    <p style="color:var(--ink-soft); font-size:13px; margin-top:18px;">Recibirás un recordatorio en tu correo una semana antes de cada cita.</p>
+    <p style="color:var(--ink-soft); font-size:13px; margin-top:18px;">Después de adoptar recibirás recordatorios de vacunas y citas veterinarias.</p>
+  </section>
+
+  <!-- ADMINISTRACION -->
+  <section class="screen" id="admin">
+    <div class="hero"><div><h2>Administración</h2><p>Verifica refugios y aprueba las publicaciones antes de que lleguen al catálogo.</p></div></div>
+    <div class="panel-grid">
+      <div>
+        <h3 class="section-title">Refugios por verificar</h3>
+        <div id="admin-refuges"></div>
+      </div>
+      <div>
+        <h3 class="section-title">Publicaciones por aprobar</h3>
+        <div id="admin-pets"></div>
+      </div>
+    </div>
   </section>
 
 </main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-  const PETS = {"rex": {"name": "Rex", "species": "Perro", "size": "Mediano", "age": "2 años", "desc": "Rex es tranquilo, sociable con otros perros y ya conoce la orden \"sentado\". Ideal para una familia con patio o para salidas frecuentes.", "refuge": "Refugio Huellas de Tijuana", "photo": "beagle"}, "mia": {"name": "Mía", "species": "Gata", "size": "Pequeña", "age": "1 año", "desc": "Mía es curiosa y cariñosa una vez que confía en ti. Se lleva bien con niños y le encanta dormir cerca de una ventana soleada.", "refuge": "Rescate Felino BC", "photo": "siamese"}, "toby": {"name": "Toby", "species": "Perro", "size": "Pequeño", "age": "4 años", "desc": "Toby es juguetón, le encanta la compañía y se adapta bien a departamentos. Ya está acostumbrado a caminar con correa.", "refuge": "Refugio Huellas de Tijuana", "photo": "pug"}, "luna": {"name": "Luna", "species": "Gata", "size": "Mediana", "age": "3 años", "desc": "Luna es independiente pero muy leal a su familia. Convive bien con otros gatos y disfruta de espacios altos para trepar.", "refuge": "Rescate Felino BC", "photo": "tigercat"}, "nube": {"name": "Nube", "species": "Perro", "size": "Pequeño", "age": "1 año", "desc": "Nube es enérgica y muy apegada a las personas. Todavía está en entrenamiento básico, ideal para alguien con tiempo para socializarla.", "refuge": "Patitas Felices A.C.", "photo": "chihuahua"}, "sol": {"name": "Sol", "species": "Perro", "size": "Grande", "age": "3 años", "desc": "Sol es amigable con todos, niños incluidos. Le encanta nadar y necesita ejercicio diario, ideal para familias activas.", "refuge": "Refugio Huellas de Tijuana", "photo": "golden"}, "coco": {"name": "Coco", "species": "Gata", "size": "Mediana", "age": "2 años", "desc": "Coco es tranquila y elegante, disfruta de siestas largas. Requiere cepillado semanal por su pelaje largo.", "refuge": "Rescate Felino BC", "photo": "persian"}, "thor": {"name": "Thor", "species": "Perro", "size": "Grande", "age": "4 años", "desc": "Thor es protector, inteligente y obediente. Ya tiene entrenamiento básico y se lleva bien con otros perros grandes.", "refuge": "Patitas Felices A.C.", "photo": "shepherd"}, "cleo": {"name": "Cleo", "species": "Gata", "size": "Pequeña", "age": "2 años", "desc": "Cleo es activa y vocal, le gusta jugar con pelotas y perseguir luces. Se adapta rápido a hogares con otras mascotas.", "refuge": "Rescate Felino BC", "photo": "egyptian"}, "nieve": {"name": "Nieve", "species": "Perro", "size": "Grande", "age": "2 años", "desc": "Nieve es vivaz y necesita mucho ejercicio. Es vocal y muy sociable, perfecta para dueños con experiencia en razas activas.", "refuge": "Refugio Huellas de Tijuana", "photo": "husky"}};
-    let session = null;        // { name, email, role: 'adoptante'|'refugio'|'invitado', org?, verified }
+  /* ====== CONFIGURACIÓN DE SUPABASE ======
+     Estos dos valores son públicos por diseño: la seguridad real la dan las políticas RLS de la base de datos.
+     Los encuentras en Supabase > Project Settings > API. */
+  window.PAWCLOUD_CONFIG = {
+    SUPABASE_URL: "https://dammzehtzuzmsgqiaxnz.supabase.co",
+    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhbW16ZWh0enV6bXNncWlheG56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk2OTAsImV4cCI6MjEwNjgwNTY5MH0.bnpvLBaYY2urf0eNtPOuIkGX7jbBAXcN0Dub4gWFo2g"
+  };
+</script>
+<script>
+  let API = null;            // capa de datos (Supabase, o un simulador en las pruebas)
+  let session = null;        // perfil: { id, name, role, org_name, verified } | { role:'invitado' }
   let pendingPetId = null;   // mascota que el invitado quería solicitar antes de registrarse
-  let currentPetId = null;   // mascota mostrada actualmente en la ficha
+  let currentPet = null;     // mascota mostrada en la ficha
+  let catalog = [];
 
   const NAV_BY_ROLE = {
-    adoptante: [
-      { id: "catalogo", label: "Explorar" },
-      { id: "ficha", label: "Ficha de mascota" },
-      { id: "solicitud", label: "Solicitud" },
-      { id: "seguimiento", label: "Seguimiento" },
-    ],
-    refugio: [
-      { id: "catalogo", label: "Explorar" },
-      { id: "refugio", label: "Panel refugio" },
-    ],
-    invitado: [
-      { id: "catalogo", label: "Explorar" },
-      { id: "ficha", label: "Ficha de mascota" },
-    ],
+    adoptante:  [{ id:"catalogo", label:"Explorar" }, { id:"seguimiento", label:"Mis solicitudes" }],
+    refugio:    [{ id:"catalogo", label:"Explorar" }, { id:"panel", label:"Mi panel" }],
+    rescatista: [{ id:"catalogo", label:"Explorar" }, { id:"panel", label:"Mi panel" }],
+    admin:      [{ id:"catalogo", label:"Explorar" }, { id:"admin", label:"Administración" }],
+    invitado:   [{ id:"catalogo", label:"Explorar" }]
   };
+  const ROLE_LABEL = { adoptante:"Adoptante", refugio:"Refugio", rescatista:"Rescatista", admin:"Admin", invitado:"Invitado" };
+  const SIZE_LABEL = { pequeno:"Pequeño", mediano:"Mediano", grande:"Grande" };
+  const SPECIES_LABEL = { perro:"Perro", gato:"Gato" };
+  const PLACEHOLDER = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F1EBDB"/><text x="50" y="62" font-size="42" text-anchor="middle">🐾</text></svg>');
 
-  function photoSrc(key){ return "images/" + key + ".jpg"; }
-
-  function loadAccounts(){
-    try { return JSON.parse(localStorage.getItem('pawcloud_accounts') || '[]'); }
-    catch(e) { return []; }
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   }
-  function saveAccounts(accounts){
-    try { localStorage.setItem('pawcloud_accounts', JSON.stringify(accounts)); }
-    catch(e) { /* almacenamiento no disponible, continuamos solo en memoria */ }
+  function photoOf(p){ return p && p.photo_url ? p.photo_url : PLACEHOLDER; }
+  function $(id){ return document.getElementById(id); }
+
+  let toastTimer = null;
+  function toast(msg){
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
   }
 
+  function friendlyError(e){
+    const m = (e && e.message) || String(e);
+    if(/invalid login/i.test(m)) return "Correo o contraseña incorrectos.";
+    if(/already registered|already been registered/i.test(m)) return "Ya existe una cuenta con ese correo.";
+    if(/not confirmed/i.test(m)) return "Confirma tu correo antes de entrar (revisa tu bandeja).";
+    if(/row-level security/i.test(m)) return "No tienes permiso para hacer esto con tu cuenta actual.";
+    if(/Failed to fetch|NetworkError/i.test(m)) return "No se pudo conectar. Revisa tu internet e inténtalo de nuevo.";
+    return m;
+  }
+
+  /* ====== CAPA DE DATOS (Supabase) ====== */
+  function makeApi(sb){
+    const fail = e => { throw new Error(e.message || String(e)); };
+    const ok = r => { if(r.error) fail(r.error); return r.data; };
+    const profileOf = async uid => ok(await sb.from("profiles").select("*").eq("id", uid).single());
+    return {
+      async currentProfile(){
+        const r = await sb.auth.getSession();
+        return r.data && r.data.session ? profileOf(r.data.session.user.id) : null;
+      },
+      async signUp(f){
+        const r = await sb.auth.signUp({ email:f.email, password:f.password, options:{ data:{ name:f.name, role:f.role, org_name:f.org || "" } } });
+        if(r.error) fail(r.error);
+        if(!r.data.session) return { needsConfirmation:true };
+        return { profile: await profileOf(r.data.user.id) };
+      },
+      async signIn(email, password){
+        const r = await sb.auth.signInWithPassword({ email, password });
+        if(r.error) fail(r.error);
+        return profileOf(r.data.user.id);
+      },
+      async refreshProfile(uid){ return profileOf(uid); },
+      async signOut(){ await sb.auth.signOut(); },
+      async listPets(){
+        return ok(await sb.from("pets").select("*").eq("moderation","aprobada").eq("status","disponible")
+          .order("created_at", { ascending:false }).order("name"));
+      },
+      async myPets(uid){ return ok(await sb.from("pets").select("*").eq("owner_id", uid).order("created_at", { ascending:false })); },
+      async createPet(p, file, uid){
+        let photo_url = null;
+        if(file){
+          const ext = ((file.name.split(".").pop() || "jpg").toLowerCase()).replace(/[^a-z0-9]/g, "") || "jpg";
+          const path = uid + "/" + Date.now() + "." + ext;
+          const up = await sb.storage.from("pet-photos").upload(path, file, { contentType:file.type });
+          if(up.error) fail(up.error);
+          photo_url = sb.storage.from("pet-photos").getPublicUrl(path).data.publicUrl;
+        }
+        return ok(await sb.from("pets").insert(Object.assign({}, p, { photo_url })).select().single());
+      },
+      async requestAdoption(r){ return ok(await sb.from("adoption_requests").insert(r).select().single()); },
+      async myRequests(uid){
+        return ok(await sb.from("adoption_requests").select("*, pets(name, photo_url)").eq("adopter_id", uid).order("created_at", { ascending:false }));
+      },
+      async receivedRequests(uid){
+        return ok(await sb.from("adoption_requests").select("*, pets!inner(name, owner_id, photo_url)").eq("pets.owner_id", uid).order("created_at", { ascending:false }));
+      },
+      async respondRequest(req, status){
+        ok(await sb.from("adoption_requests").update({ status }).eq("id", req.id));
+        if(status === "aceptada") ok(await sb.from("pets").update({ status:"adoptada" }).eq("id", req.pet_id));
+      },
+      async pendingRefuges(){ return ok(await sb.from("profiles").select("*").eq("role","refugio").eq("verified", false)); },
+      async pendingPets(){ return ok(await sb.from("pets").select("*").eq("moderation","pendiente").order("created_at")); },
+      async setModeration(id, moderation){ ok(await sb.from("pets").update({ moderation }).eq("id", id)); },
+      async verifyProfile(id){ ok(await sb.from("profiles").update({ verified:true }).eq("id", id)); }
+    };
+  }
+
+  function loadScript(src){
+    return new Promise(resolve => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = () => resolve(true); s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  }
+
+  async function getApi(){
+    if(window.__PAWCLOUD_API__) return window.__PAWCLOUD_API__;
+    const cfg = window.PAWCLOUD_CONFIG || {};
+    if(!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || /^PEGA/.test(cfg.SUPABASE_ANON_KEY)) return null;
+    if(!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js");
+    if(!window.supabase) return null;
+    return makeApi(window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY));
+  }
+
+  /* ====== NAVEGACIÓN ====== */
   function showScreen(id){
-    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    document.querySelectorAll('#nav button[data-screen]').forEach(b=>b.classList.toggle('active', b.dataset.screen===id));
-    window.scrollTo({top:0, behavior:'smooth'});
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    $(id).classList.add("active");
+    document.querySelectorAll("#nav button[data-screen]").forEach(b => b.classList.toggle("active", b.dataset.screen === id));
+    try { window.scrollTo({ top:0, behavior:"smooth" }); } catch(e) {}
+  }
+
+  async function goTo(id){
+    showScreen(id);
+    if(id === "catalogo") await loadCatalog();
+    else if(id === "panel") await loadPanel();
+    else if(id === "seguimiento") await loadMyRequests();
+    else if(id === "admin") await loadAdmin();
   }
 
   function renderNav(){
-    const nav = document.getElementById('nav');
-    nav.innerHTML = '';
+    const nav = $("nav");
+    nav.innerHTML = "";
     if(!session) return;
-    NAV_BY_ROLE[session.role].forEach(item=>{
-      const btn = document.createElement('button');
+    NAV_BY_ROLE[session.role].forEach(item => {
+      const btn = document.createElement("button");
       btn.textContent = item.label;
       btn.dataset.screen = item.id;
-      btn.addEventListener('click', ()=>showScreen(item.id));
+      btn.addEventListener("click", () => goTo(item.id));
       nav.appendChild(btn);
     });
-    const chip = document.createElement('div');
-    chip.className = 'user-chip';
-    const roleLabels = { adoptante:'Adoptante', refugio:'Refugio', invitado:'Invitado' };
-    chip.innerHTML = '<span class="role-pill ' + session.role + '">' + roleLabels[session.role] + '</span> <b>' + session.name + '</b>';
-    const switchBtn = document.createElement('button');
-    switchBtn.className = 'link-btn';
-    switchBtn.textContent = session.role === 'invitado' ? 'Crear cuenta' : 'Cerrar sesión';
-    switchBtn.addEventListener('click', endSession);
-    chip.appendChild(switchBtn);
+    const chip = document.createElement("div");
+    chip.className = "user-chip";
+    chip.innerHTML = '<span class="role-pill ' + session.role + '">' + ROLE_LABEL[session.role] + "</span> <b>" + esc(session.name) + "</b>";
+    const out = document.createElement("button");
+    out.className = "link-btn";
+    out.textContent = session.role === "invitado" ? "Crear cuenta" : "Cerrar sesión";
+    out.addEventListener("click", endSession);
+    chip.appendChild(out);
     nav.appendChild(chip);
   }
 
+  /* ====== AUTENTICACIÓN ====== */
   function switchAuthTab(tab){
-    document.querySelectorAll('.auth-tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
-    document.getElementById('login-form').style.display = tab==='login' ? 'flex' : 'none';
-    document.getElementById('register-form').style.display = tab==='register' ? 'flex' : 'none';
+    document.querySelectorAll(".auth-tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+    $("login-form").style.display = tab === "login" ? "flex" : "none";
+    $("register-form").style.display = tab === "register" ? "flex" : "none";
   }
-
   function toggleOrgField(){
     const role = document.querySelector('input[name="reg-role"]:checked').value;
-    document.getElementById('org-field').style.display = role === 'refugio' ? 'flex' : 'none';
+    $("org-field").style.display = role === "refugio" ? "flex" : "none";
   }
 
-  function handleLogin(e){
+  async function handleLogin(e){
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim().toLowerCase();
-    const pass = document.getElementById('login-password').value;
-    const errEl = document.getElementById('login-error');
-    const acc = loadAccounts().find(a => a.email === email);
-    if(!acc){ errEl.textContent = 'No encontramos una cuenta con ese correo.'; return; }
-    if(acc.password !== pass){ errEl.textContent = 'Contraseña incorrecta.'; return; }
-    errEl.textContent = '';
-    enterSession(acc, false);
+    const errEl = $("login-error");
+    errEl.textContent = "";
+    if(!API){ errEl.textContent = "La base de datos no está configurada."; return; }
+    try {
+      const profile = await API.signIn($("login-email").value.trim().toLowerCase(), $("login-password").value);
+      await enterSession(profile);
+    } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
-  function handleRegister(e){
+  async function handleRegister(e){
     e.preventDefault();
-    const name = document.getElementById('reg-name').value.trim();
-    const email = document.getElementById('reg-email').value.trim().toLowerCase();
-    const password = document.getElementById('reg-password').value;
+    const errEl = $("register-error");
+    errEl.textContent = "";
+    if(!API){ errEl.textContent = "La base de datos no está configurada."; return; }
     const role = document.querySelector('input[name="reg-role"]:checked').value;
-    const org = document.getElementById('reg-org').value.trim();
-    const errEl = document.getElementById('register-error');
-    const accounts = loadAccounts();
-    if(accounts.some(a => a.email === email)){ errEl.textContent = 'Ya existe una cuenta con ese correo.'; return; }
-    errEl.textContent = '';
-    const acc = { name, email, password, role, org: role === 'refugio' ? (org || name) : null, verified: role === 'adoptante' };
-    accounts.push(acc);
-    saveAccounts(accounts);
-    enterSession(acc, true);
-  }
-
-  function enterSession(acc, justRegistered){
-    session = acc;
-    renderNav();
-    if(acc.role === 'refugio'){
-      document.getElementById('refugio-subtitle').textContent = acc.org || acc.name;
-      renderVerifyBanner(justRegistered);
-      showScreen('refugio');
-    } else {
-      if(pendingPetId){
-        const id = pendingPetId;
-        pendingPetId = null;
-        openPet(id);
-        document.getElementById('solicitud-nombre').value = session.name;
-        showScreen('solicitud');
-      } else {
-        showScreen('catalogo');
-      }
-    }
-  }
-
-  function renderVerifyBanner(justRegistered){
-    const el = document.getElementById('verify-banner');
-    const btn = document.getElementById('publish-btn');
-    if(session.verified){
-      el.style.display = 'none';
-      btn.disabled = false;
-      btn.title = '';
-      return;
-    }
-    el.style.display = 'flex';
-    el.className = 'verify-banner pending';
-    el.textContent = '⏳ Tu cuenta de refugio está en revisión. Podrás publicar mascotas en cuanto sea verificada.';
-    btn.disabled = true;
-    btn.title = 'Disponible cuando tu cuenta esté verificada';
-    if(justRegistered){
-      setTimeout(()=>{
-        if(!session || session.email !== acc_email_snapshot) return;
-        session.verified = true;
-        const accounts = loadAccounts().map(a => a.email === session.email ? Object.assign({}, a, { verified:true }) : a);
-        saveAccounts(accounts);
-        el.className = 'verify-banner done';
-        el.textContent = '✅ Tu cuenta ya fue verificada. Ya puedes publicar mascotas.';
-        btn.disabled = false;
-        btn.title = '';
-      }, 4000);
-    }
-    var acc_email_snapshot = session.email;
-  }
-
-  function continueAsGuest(){
-    session = { role:'invitado', name:'Invitado' };
-    renderNav();
-    showScreen('catalogo');
-  }
-
-  function endSession(){
-    session = null;
-    pendingPetId = null;
-    renderNav();
-    document.getElementById('login-error').textContent = '';
-    document.getElementById('register-error').textContent = '';
-    switchAuthTab('login');
-    showScreen('auth');
-  }
-
-  function goToSolicitud(){
-    if(!session || session.role === 'invitado'){
-      pendingPetId = currentPetId;
-      document.getElementById('auth-subtitle').textContent = 'Crea una cuenta para solicitar esta adopción.';
-      switchAuthTab('register');
-      showScreen('auth');
-      return;
-    }
-    document.getElementById('solicitud-nombre').value = session.name;
-    showScreen('solicitud');
-  }
-
-  // Filtrado real del catálogo
-  document.querySelectorAll('#chips .chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      document.querySelectorAll('#chips .chip').forEach(x=>x.classList.remove('on'));
-      chip.classList.add('on');
-      const filter = chip.dataset.filter;
-      let visibleCount = 0;
-      document.querySelectorAll('#pet-grid .pet-card').forEach(card=>{
-        let show = true;
-        if(filter === 'perro') show = card.dataset.species === 'perro';
-        else if(filter === 'gato') show = card.dataset.species === 'gato';
-        else if(filter === 'pequeno') show = card.dataset.size === 'pequeno';
-        else if(filter === 'depto') show = card.dataset.depto === '1';
-        card.style.display = show ? '' : 'none';
-        if(show) visibleCount++;
+    const name = $("reg-name").value.trim();
+    try {
+      const r = await API.signUp({
+        name, email:$("reg-email").value.trim().toLowerCase(), password:$("reg-password").value,
+        role, org: role === "refugio" ? ($("reg-org").value.trim() || name) : ""
       });
-      document.getElementById('empty-msg').style.display = visibleCount === 0 ? 'block' : 'none';
+      if(r.needsConfirmation){
+        errEl.textContent = "Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.";
+        return;
+      }
+      await enterSession(r.profile, true);
+    } catch(err){ errEl.textContent = friendlyError(err); }
+  }
+
+  async function enterSession(profile, justRegistered){
+    session = profile;
+    renderNav();
+    if(profile.role === "admin"){ await goTo("admin"); return; }
+    if(profile.role === "refugio" || profile.role === "rescatista"){ await goTo("panel"); return; }
+    if(pendingPetId){
+      const id = pendingPetId;
+      pendingPetId = null;
+      await loadCatalog();
+      const pet = catalog.find(p => p.id === id);
+      if(pet){ openPet(pet.id); goToSolicitud(); return; }
+    }
+    await goTo("catalogo");
+  }
+
+  async function bootSession(){
+    API = await getApi();
+    if(!API){ $("config-warn").style.display = "block"; return; }
+    try {
+      const profile = await API.currentProfile();
+      if(profile) await enterSession(profile);
+    } catch(e) { /* sin sesión previa: se queda en la pantalla de acceso */ }
+  }
+
+  async function continueAsGuest(){
+    session = { role:"invitado", name:"Invitado" };
+    renderNav();
+    await goTo("catalogo");
+  }
+
+  async function endSession(){
+    try { if(API) await API.signOut(); } catch(e) {}
+    session = null; pendingPetId = null; catalog = [];
+    renderNav();
+    $("login-error").textContent = ""; $("register-error").textContent = "";
+    $("auth-subtitle").textContent = "Inicia sesión o crea una cuenta para continuar.";
+    switchAuthTab("login");
+    showScreen("auth");
+  }
+
+  /* ====== CATÁLOGO ====== */
+  function petCardHtml(p){
+    return '<article class="pet-card" data-id="' + esc(p.id) + '" data-species="' + esc(p.species) + '" data-size="' + esc(p.size) + '" data-depto="' + (p.apto_depto ? 1 : 0) + '">' +
+      (p.tag ? '<span class="tag">' + esc(p.tag) + "</span>" : "") +
+      '<img class="avatar-img" alt="' + esc(p.name) + '" src="' + esc(photoOf(p)) + '" loading="lazy" decoding="async" width="360" height="360">' +
+      "<h3>" + esc(p.name) + '</h3><p class="pet-meta">' + esc(SPECIES_LABEL[p.species]) + " · " + esc(SIZE_LABEL[p.size]) + " · " + esc(p.age) + "</p></article>";
+  }
+
+  async function loadCatalog(){
+    const loading = $("catalog-loading"), grid = $("pet-grid");
+    if(!API){ grid.innerHTML = ""; return; }
+    loading.style.display = "block";
+    try { catalog = await API.listPets(); }
+    catch(err){ catalog = []; toast(friendlyError(err)); }
+    loading.style.display = "none";
+    grid.innerHTML = catalog.map(petCardHtml).join("");
+    grid.querySelectorAll(".pet-card").forEach(card => card.addEventListener("click", () => openPet(card.dataset.id)));
+    document.querySelectorAll("#chips .chip").forEach(c => c.classList.toggle("on", c.dataset.filter === "todos"));
+    $("empty-msg").style.display = catalog.length ? "none" : "block";
+    $("empty-msg").textContent = catalog.length ? "" : "Aún no hay mascotas disponibles.";
+  }
+
+  document.querySelectorAll("#chips .chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("#chips .chip").forEach(x => x.classList.remove("on"));
+      chip.classList.add("on");
+      const f = chip.dataset.filter;
+      let visible = 0;
+      document.querySelectorAll("#pet-grid .pet-card").forEach(card => {
+        let show = true;
+        if(f === "perro") show = card.dataset.species === "perro";
+        else if(f === "gato") show = card.dataset.species === "gato";
+        else if(f === "pequeno") show = card.dataset.size === "pequeno";
+        else if(f === "depto") show = card.dataset.depto === "1";
+        card.style.display = show ? "" : "none";
+        if(show) visible++;
+      });
+      $("empty-msg").textContent = "No hay mascotas que coincidan con este filtro por ahora.";
+      $("empty-msg").style.display = visible === 0 ? "block" : "none";
     });
   });
 
   function openPet(id){
-    currentPetId = id;
-    const p = PETS[id];
-    document.getElementById('ficha-photo').src = photoSrc(p.photo);
-    document.getElementById('ficha-photo').alt = p.name;
-    document.getElementById('ficha-name').textContent = p.name;
-    document.getElementById('ficha-refuge').textContent = p.refuge + " · Publicado recientemente";
-    document.getElementById('ficha-desc').textContent = p.desc;
-    document.getElementById('ficha-facts').innerHTML =
-      '<div class="fact"><b>Especie</b>'+p.species+'</div>'+
-      '<div class="fact"><b>Edad</b>'+p.age+'</div>'+
-      '<div class="fact"><b>Tamaño</b>'+p.size+'</div>'+
-      '<div class="fact"><b>Salud</b>Vacunado y esterilizado</div>';
-    showScreen('ficha');
+    const p = catalog.find(x => x.id === id);
+    if(!p) return;
+    currentPet = p;
+    $("ficha-photo").src = photoOf(p);
+    $("ficha-photo").alt = p.name;
+    $("ficha-name").textContent = p.name;
+    $("ficha-refuge").textContent = (p.owner_name || "Particular") + " · Publicado en PawCloud";
+    $("ficha-desc").textContent = p.description || "";
+    $("ficha-facts").innerHTML =
+      '<div class="fact"><b>Especie</b>' + esc(SPECIES_LABEL[p.species]) + "</div>" +
+      '<div class="fact"><b>Edad</b>' + esc(p.age) + "</div>" +
+      '<div class="fact"><b>Tamaño</b>' + esc(SIZE_LABEL[p.size]) + "</div>" +
+      '<div class="fact"><b>Departamento</b>' + (p.apto_depto ? "Se adapta" : "Mejor con espacio") + "</div>";
+    showScreen("ficha");
   }
 
-  const miniIds = ['rex','mia'];
-  document.getElementById('refugio-mini').innerHTML = miniIds.map(id=>{
-    const p = PETS[id];
-    return '<div class="mini-card"><img src="'+photoSrc(p.photo)+'" alt="'+p.name+'"><div><h3 style="margin:0;font-family:var(--font-head);font-size:15px;">'+p.name+'</h3><p class="pet-meta" style="margin:0;">Activo</p></div></div>';
-  }).join('');
+  function goToSolicitud(){
+    if(!session || session.role === "invitado"){
+      pendingPetId = currentPet && currentPet.id;
+      $("auth-subtitle").textContent = "Crea una cuenta para solicitar esta adopción.";
+      switchAuthTab("register");
+      showScreen("auth");
+      return;
+    }
+    if(session.role !== "adoptante"){
+      toast("Solo las cuentas de adoptante pueden solicitar una adopción.");
+      return;
+    }
+    $("solicitud-sub").textContent = "Solicitud para adoptar a " + currentPet.name + ".";
+    $("solicitud-nombre").value = session.name;
+    $("solicitud-error").textContent = "";
+    showScreen("solicitud");
+  }
+
+  async function handleSolicitud(e){
+    e.preventDefault();
+    const errEl = $("solicitud-error");
+    errEl.textContent = "";
+    try {
+      await API.requestAdoption({
+        pet_id: currentPet.id, adopter_id: session.id, adopter_name: $("solicitud-nombre").value.trim(),
+        housing_type: $("solicitud-vivienda").value, other_pets: $("solicitud-otras").value.trim(), message: $("solicitud-mensaje").value.trim()
+      });
+      toast("Solicitud enviada a " + (currentPet.owner_name || "quien la cuida") + ".");
+      $("solicitud-form").reset();
+      await goTo("seguimiento");
+    } catch(err){ errEl.textContent = friendlyError(err); }
+  }
+
+  /* ====== ADOPTANTE: MIS SOLICITUDES ====== */
+  async function loadMyRequests(){
+    const box = $("my-requests");
+    box.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    try {
+      const rows = await API.myRequests(session.id);
+      box.innerHTML = rows.length ? rows.map(r =>
+        '<div class="req-item"><img alt="" src="' + esc(photoOf(r.pets)) + '"><div class="req-info"><b>' + esc(r.pets ? r.pets.name : "Mascota") + "</b>" +
+        "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + '</small></div><span class="badge ' + esc(r.status) + '">' + esc(r.status) + "</span></div>"
+      ).join("") : '<p class="list-empty">Todavía no has enviado solicitudes. Explora el catálogo para empezar.</p>';
+    } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  /* ====== REFUGIO / RESCATISTA ====== */
+  async function loadPanel(){
+    try { session = Object.assign({}, session, await API.refreshProfile(session.id)); renderNav(); } catch(e) {}
+    const isRefugio = session.role === "refugio";
+    $("panel-title").textContent = isRefugio ? "Panel del refugio" : "Panel de rescatista";
+    $("panel-subtitle").textContent = session.org_name || session.name;
+    const banner = $("verify-banner"), btn = $("publish-btn");
+    if(isRefugio && !session.verified){
+      banner.style.display = "flex"; banner.className = "verify-banner pending";
+      banner.textContent = "⏳ Tu cuenta de refugio está en revisión. Podrás publicar mascotas en cuanto un administrador la verifique.";
+      btn.disabled = true; btn.title = "Disponible cuando tu cuenta esté verificada";
+    } else if(isRefugio){
+      banner.style.display = "flex"; banner.className = "verify-banner done";
+      banner.textContent = "✅ Cuenta verificada. Tus publicaciones aparecen en el catálogo de inmediato.";
+      btn.disabled = false; btn.title = "";
+    } else {
+      banner.style.display = "flex"; banner.className = "verify-banner pending";
+      banner.textContent = "ℹ️ Las publicaciones de particulares se revisan antes de aparecer en el catálogo.";
+      btn.disabled = false; btn.title = "";
+    }
+    const pets = $("panel-pets"), reqs = $("panel-requests");
+    pets.innerHTML = reqs.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    try {
+      const [myPets, received] = await Promise.all([API.myPets(session.id), API.receivedRequests(session.id)]);
+      const pending = received.filter(r => r.status === "pendiente");
+      $("panel-stats").innerHTML =
+        '<div class="stat"><b>' + myPets.length + "</b><span>Mascotas publicadas</span></div>" +
+        '<div class="stat"><b>' + myPets.filter(p => p.status === "adoptada").length + "</b><span>Adoptadas</span></div>" +
+        '<div class="stat"><b>' + pending.length + "</b><span>Solicitudes pendientes</span></div>";
+      pets.innerHTML = myPets.length ? myPets.map(p =>
+        '<div class="req-item"><img alt="" src="' + esc(photoOf(p)) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
+        esc(p.status === "adoptada" ? "Adoptada" : "Disponible") + '</small></div><span class="badge ' + esc(p.moderation) + '">' + esc(p.moderation) + "</span></div>"
+      ).join("") : '<p class="list-empty">Aún no has publicado mascotas.</p>';
+      reqs.innerHTML = received.length ? received.map(r =>
+        '<div class="req-item"><div class="req-info"><b>' + esc(r.adopter_name) + "</b> quiere adoptar a <b>" + esc(r.pets ? r.pets.name : "") + "</b>" +
+        "<small>" + esc(r.housing_type || "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") + "</small></div>" +
+        (r.status === "pendiente"
+          ? '<div class="req-actions"><button class="accept" data-id="' + esc(r.id) + '" data-st="aceptada">Aceptar</button><button class="decline" data-id="' + esc(r.id) + '" data-st="rechazada">Rechazar</button></div>'
+          : '<span class="badge ' + esc(r.status) + '">' + esc(r.status) + "</span>") + "</div>"
+      ).join("") : '<p class="list-empty">Todavía no recibes solicitudes.</p>';
+      reqs.querySelectorAll(".req-actions button").forEach(b => b.addEventListener("click", async () => {
+        const req = received.find(r => r.id === b.dataset.id);
+        try { await API.respondRequest(req, b.dataset.st); toast("Solicitud " + b.dataset.st + "."); await loadPanel(); }
+        catch(err){ toast(friendlyError(err)); }
+      }));
+    } catch(err){ pets.innerHTML = reqs.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  async function handlePublicar(e){
+    e.preventDefault();
+    const errEl = $("publicar-error"), file = $("pub-photo").files[0];
+    errEl.textContent = "";
+    if(file && file.size > 3 * 1024 * 1024){ errEl.textContent = "La foto pesa más de 3 MB. Elige una más ligera."; return; }
+    const submit = $("publicar-submit");
+    submit.disabled = true;
+    try {
+      const pet = await API.createPet({
+        name: $("pub-name").value.trim(), species: $("pub-species").value, size: $("pub-size").value, age: $("pub-age").value.trim(),
+        description: $("pub-desc").value.trim(), apto_depto: $("pub-depto").checked
+      }, file || null, session.id);
+      toast(pet.moderation === "aprobada" ? "Publicada: ya aparece en el catálogo." : "Enviada a revisión: un administrador la aprobará pronto.");
+      $("publicar-form").reset();
+      await goTo("panel");
+    } catch(err){ errEl.textContent = friendlyError(err); }
+    submit.disabled = false;
+  }
+
+  /* ====== ADMINISTRADOR ====== */
+  async function loadAdmin(){
+    const refs = $("admin-refuges"), pets = $("admin-pets");
+    refs.innerHTML = pets.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    try {
+      const [refuges, pending] = await Promise.all([API.pendingRefuges(), API.pendingPets()]);
+      refs.innerHTML = refuges.length ? refuges.map(r =>
+        '<div class="req-item"><div class="req-info"><b>' + esc(r.org_name || r.name) + "</b><small>" + esc(r.name) + " · " + esc(r.email) + '</small></div>' +
+        '<div class="req-actions"><button class="accept" data-verify="' + esc(r.id) + '">Verificar</button></div></div>'
+      ).join("") : '<p class="list-empty">No hay refugios esperando verificación.</p>';
+      pets.innerHTML = pending.length ? pending.map(p =>
+        '<div class="req-item"><img alt="" src="' + esc(photoOf(p)) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" + esc(p.owner_name || "") + " · " + esc(SPECIES_LABEL[p.species]) + " · " + esc(p.age) + "</small></div>" +
+        '<div class="req-actions"><button class="accept" data-mod="' + esc(p.id) + '" data-st="aprobada">Aprobar</button><button class="decline" data-mod="' + esc(p.id) + '" data-st="rechazada">Rechazar</button></div></div>'
+      ).join("") : '<p class="list-empty">No hay publicaciones por revisar.</p>';
+      refs.querySelectorAll("[data-verify]").forEach(b => b.addEventListener("click", async () => {
+        try { await API.verifyProfile(b.dataset.verify); toast("Refugio verificado."); await loadAdmin(); } catch(err){ toast(friendlyError(err)); }
+      }));
+      pets.querySelectorAll("[data-mod]").forEach(b => b.addEventListener("click", async () => {
+        try { await API.setModeration(b.dataset.mod, b.dataset.st); toast("Publicación " + b.dataset.st + "."); await loadAdmin(); } catch(err){ toast(friendlyError(err)); }
+      }));
+    } catch(err){ refs.innerHTML = pets.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  window.__pawcloudReady = bootSession();
 </script>
 </body>
 </html>
