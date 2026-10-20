@@ -58,7 +58,8 @@ create table public.adoption_requests (
   other_pets text,
   message text,
   status text not null default 'pendiente' check (status in ('pendiente','aceptada','rechazada')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (pet_id, adopter_id)
 );
 
 -- Centros de ayuda y veterinarias (para el mapa)
@@ -159,6 +160,7 @@ create policy "publicar mascota" on public.pets for insert
 create policy "dueno edita sus mascotas" on public.pets for update
   using (owner_id = auth.uid() or public.is_admin());
 create policy "admin borra mascotas" on public.pets for delete using (public.is_admin());
+create policy "dueno retira mascota" on public.pets for delete using (owner_id = auth.uid());
 
 -- adoption_requests
 create policy "adoptante crea solicitud" on public.adoption_requests for insert
@@ -168,6 +170,8 @@ create policy "ver solicitudes" on public.adoption_requests for select
     adopter_id = auth.uid() or public.is_admin()
     or exists (select 1 from public.pets p where p.id = pet_id and p.owner_id = auth.uid())
   );
+create policy "adoptante cancela solicitud" on public.adoption_requests for delete
+  using (adopter_id = auth.uid() and status = 'pendiente');
 create policy "dueno responde solicitud" on public.adoption_requests for update
   using (public.is_admin() or exists (select 1 from public.pets p where p.id = pet_id and p.owner_id = auth.uid()));
 

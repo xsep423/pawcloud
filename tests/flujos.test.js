@@ -63,6 +63,8 @@ function makeFakeApi() {
     async pendingPets() { return db.pets.filter((p) => p.moderation === "pendiente"); },
     async setModeration(id, m) { db.pets.find((p) => p.id === id).moderation = m; },
     async verifyProfile(id) { db.users.find((u) => u.id === id).verified = true; },
+    async withdrawPet(id) { db.pets = db.pets.filter((p) => p.id !== id); db.reqs = db.reqs.filter((r) => r.pet_id !== id); },
+    async cancelRequest(id) { db.reqs = db.reqs.filter((r) => r.id !== id); },
     async listPlaces() { return db.places.slice(); },
     async addPlace(p) { const row = { id: "pl" + ++n, ...p }; db.places.push(row); return row; },
     async deletePlace(id) { db.places = db.places.filter((p) => p.id !== id); },
@@ -76,7 +78,7 @@ beforeEach(async () => {
   api = makeFakeApi();
   dom = new JSDOM(html, {
     runScripts: "dangerously", url: "https://pawcloud.test/", pretendToBeVisual: true,
-    beforeParse(w) { w.__PAWCLOUD_API__ = api; },
+    beforeParse(w) { w.__PAWCLOUD_API__ = api; w.confirm = () => true; },
   });
   win = dom.window; doc = win.document;
   await win.__pawcloudReady;
@@ -106,13 +108,35 @@ test("el catálogo se carga desde la base de datos con las 10 mascotas", async (
   assert.equal(doc.querySelectorAll("#pet-grid .pet-card").length, 10);
 });
 
-test("los filtros del catálogo funcionan", async () => {
+test("los filtros del catálogo funcionan y se pueden combinar", async () => {
   await win.continueAsGuest();
   clickChip("perro"); assert.equal(visibleCards().length, 6);
-  clickChip("gato"); assert.equal(visibleCards().length, 4);
-  clickChip("pequeno"); assert.equal(visibleCards().length, 4);
-  clickChip("depto"); assert.equal(visibleCards().length, 6);
+  clickChip("pequeno"); assert.equal(visibleCards().length, 2, "perros pequeños");
+  clickChip("depto"); assert.equal(visibleCards().length, 2, "perros pequeños aptos para departamento");
+  clickChip("gato"); assert.equal(visibleCards().length, 2, "gatos pequeños aptos para departamento");
   clickChip("todos"); assert.equal(visibleCards().length, 10);
+  clickChip("depto"); assert.equal(visibleCards().length, 6);
+  assert.equal(doc.querySelector('#chips .chip[data-filter="depto"]').getAttribute("aria-pressed"), "true");
+});
+
+test("la búsqueda por nombre filtra el catálogo", async () => {
+  await win.continueAsGuest();
+  const input = doc.getElementById("pet-search");
+  input.value = "lun";
+  input.dispatchEvent(new win.Event("input"));
+  assert.equal(visibleCards().length, 1);
+  input.value = "zzz";
+  input.dispatchEvent(new win.Event("input"));
+  assert.equal(visibleCards().length, 0);
+  assert.equal(doc.getElementById("empty-msg").style.display, "block");
+});
+
+test("las tarjetas se pueden abrir con el teclado", async () => {
+  await win.continueAsGuest();
+  const card = doc.querySelector('.pet-card[data-id="seed0"]');
+  assert.equal(card.getAttribute("tabindex"), "0");
+  card.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  assert.equal(activeScreen(), "ficha");
 });
 
 test("un invitado puede explorar pero no solicitar sin crear cuenta", async () => {
@@ -120,7 +144,7 @@ test("un invitado puede explorar pero no solicitar sin crear cuenta", async () =
   doc.querySelector('.pet-card[data-id="seed0"]').click();
   assert.equal(activeScreen(), "ficha");
   assert.equal(doc.getElementById("ficha-name").textContent, "Rex");
-  win.goToSolicitud();
+  await win.goToSolicitud();
   assert.equal(activeScreen(), "auth");
   assert.equal(doc.getElementById("register-form").style.display, "flex");
 });
@@ -134,7 +158,7 @@ test("registrar un adoptante lo lleva al catálogo con su menú", async () => {
 test("un invitado que se registra retoma la solicitud de la mascota elegida", async () => {
   await win.continueAsGuest();
   doc.querySelector('.pet-card[data-id="seed1"]').click();
-  win.goToSolicitud();
+  await win.goToSolicitud();
   await register("adoptante", "Luis Prueba", "luis@correo.com");
   assert.equal(activeScreen(), "solicitud");
   assert.equal(doc.getElementById("solicitud-nombre").value, "Luis Prueba");
@@ -143,13 +167,58 @@ test("un invitado que se registra retoma la solicitud de la mascota elegida", as
 test("un adoptante envía una solicitud y la ve en 'Mis solicitudes'", async () => {
   await register("adoptante", "Ana Prueba", "ana@correo.com");
   doc.querySelector('.pet-card[data-id="seed3"]').click();
-  win.goToSolicitud();
+  await win.goToSolicitud();
   doc.getElementById("solicitud-ok").checked = true;
   await win.handleSolicitud(ev);
   assert.equal(api.db.reqs.length, 1);
   assert.equal(activeScreen(), "seguimiento");
   assert.match(doc.getElementById("my-requests").textContent, /Luna/);
-  assert.match(doc.getElementById("my-requests").textContent, /pendiente/);
+  assert.match(doc.getElementById("my-requests").textContent, /Pendiente/);
+});
+
+test("no se puede enviar una segunda solicitud por la misma mascota", async () => {
+  await register("adoptante", "Ana Prueba", "ana@correo.com");
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  doc.getElementById("solicitud-ok").checked = true;
+  await win.handleSolicitud(ev);
+  await win.goTo("catalogo");
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  assert.equal(activeScreen(), "ficha", "se queda en la ficha");
+  assert.match(doc.getElementById("toast").textContent, /Ya enviaste/);
+  assert.equal(api.db.reqs.length, 1);
+});
+
+test("el adoptante puede cancelar una solicitud pendiente", async () => {
+  await register("adoptante", "Ana Prueba", "ana@correo.com");
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  doc.getElementById("solicitud-ok").checked = true;
+  await win.handleSolicitud(ev);
+  assert.match(doc.getElementById("my-requests").textContent, /Pendiente/);
+  doc.querySelector("[data-cancel]").click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(api.db.reqs.length, 0);
+});
+
+test("quien publica puede retirar una publicación", async () => {
+  await register("rescatista", "Pedro", "pedro@correo.com");
+  set("pub-name", "Canelo"); set("pub-age", "1 año"); set("pub-desc", "Collejero");
+  await win.handlePublicar(ev);
+  assert.equal(api.db.pets.filter((p) => p.name === "Canelo").length, 1);
+  doc.querySelector("[data-withdraw]").click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(api.db.pets.filter((p) => p.name === "Canelo").length, 0);
+});
+
+test("la ficha tiene botón para volver al catálogo y el catálogo trae preguntas frecuentes", async () => {
+  await win.continueAsGuest();
+  assert.ok(doc.querySelectorAll(".faq details").length >= 3);
+  doc.querySelector('.pet-card[data-id="seed0"]').click();
+  doc.querySelector("#ficha .back-link").click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(activeScreen(), "catalogo");
 });
 
 test("un refugio nuevo queda en revisión y no puede publicar hasta que el admin lo verifique", async () => {

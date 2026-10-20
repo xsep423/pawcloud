@@ -218,6 +218,19 @@
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .leaflet-popup-content{font-family:var(--font-body); color:#22271F;}
   .leaflet-popup-content b{font-family:var(--font-head);}
+  .pet-card:focus-visible,.place-item:focus-visible,.chip:focus-visible,button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--mustard); outline-offset:2px;}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));}
+  .pet-card h3{font-size:19px;}
+  .pet-meta{font-size:14px;}
+  .hero p{font-size:16px;}
+  .search-row{margin-bottom:12px; max-width:420px;}
+  .search-row input{width:100%;}
+  .chip-sep{width:1px; background:var(--line); margin:0 4px;}
+  .back-link{margin:0 0 14px -6px; font-size:14px;}
+  .faq{margin-top:40px; max-width:640px;}
+  .faq details{border-bottom:1px solid var(--line); padding:10px 0;}
+  .faq summary{cursor:pointer; font-weight:700; font-size:14.5px;}
+  .faq p{color:var(--ink-soft); font-size:14px; line-height:1.55; margin:8px 0 2px;}
 </style>
 </head>
 <body>
@@ -297,20 +310,31 @@
         <p>Mascotas de refugios y rescatistas cerca de ti, listas para un hogar.</p>
       </div>
     </div>
+    <div class="search-row"><input id="pet-search" type="search" placeholder="Buscar por nombre" aria-label="Buscar mascota por nombre" autocomplete="off"></div>
     <div class="chips" id="chips">
-      <button type="button" class="chip on" data-filter="todos">Todos</button>
-      <button type="button" class="chip" data-filter="perro">Perros</button>
-      <button type="button" class="chip" data-filter="gato">Gatos</button>
-      <button type="button" class="chip" data-filter="pequeno">Pequeño</button>
-      <button type="button" class="chip" data-filter="depto">Apto depto</button>
+      <button type="button" class="chip on" data-filter="todos" aria-pressed="true">Todos</button>
+      <button type="button" class="chip" data-filter="perro" aria-pressed="false">Perros</button>
+      <button type="button" class="chip" data-filter="gato" aria-pressed="false">Gatos</button>
+      <button type="button" class="chip" data-filter="pequeno" aria-pressed="false">Pequeño</button>
+      <button type="button" class="chip" data-filter="mediano" aria-pressed="false">Mediano</button>
+      <button type="button" class="chip" data-filter="grande" aria-pressed="false">Grande</button>
+      <button type="button" class="chip" data-filter="depto" aria-pressed="false">Apto para departamento</button>
     </div>
     <p class="loading-msg" id="catalog-loading" style="display:none;">Cargando mascotas…</p>
     <div class="grid" id="pet-grid"></div>
     <p class="empty-msg" id="empty-msg">No hay mascotas que coincidan con este filtro por ahora.</p>
+    <div class="faq">
+      <h3 class="section-title">Preguntas frecuentes</h3>
+      <details><summary>¿Cómo adopto una mascota?</summary><p>Crea una cuenta de adoptante, elige una mascota, llena la solicitud y espera la respuesta de quien la cuida. Puedes ver el estado en Mis solicitudes.</p></details>
+      <details><summary>¿Qué pasa después de enviar mi solicitud?</summary><p>Le llega a quien publicó la mascota, que puede aceptarla o rechazarla. Verás el cambio de estado en Mis solicitudes.</p></details>
+      <details><summary>¿Quién revisa las publicaciones?</summary><p>Un administrador verifica a los refugios, y las publicaciones de particulares se aprueban antes de aparecer en el catálogo.</p></details>
+      <details><summary>Quiero dar una mascota en adopción</summary><p>Crea una cuenta de rescatista (si eres particular) o de refugio, y publica desde Mi panel.</p></details>
+    </div>
   </section>
 
   <!-- FICHA -->
   <section class="screen" id="ficha">
+    <button type="button" class="link-btn back-link" onclick="goTo('catalogo')">← Volver al catálogo</button>
     <div class="detail">
       <div>
         <img id="ficha-photo" class="detail-photo" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Foto de la mascota">
@@ -384,26 +408,17 @@
   <section class="screen" id="seguimiento">
     <div class="hero"><div><h2>Mis solicitudes</h2><p>Aquí ves el estado de cada adopción que pediste.</p></div></div>
     <div id="my-requests"></div>
-    <h3 class="section-title" style="margin-top:32px;">Seguimiento de salud (ejemplo)</h3>
-    <table>
-      <thead><tr><th>Evento</th><th>Fecha</th><th>Estado</th></tr></thead>
-      <tbody>
-        <tr><td>Vacuna antirrábica</td><td>12 sep 2026</td><td><span class="status done">Aplicada</span></td></tr>
-        <tr><td>Revisión general</td><td>3 oct 2026</td><td><span class="status soon">Próxima</span></td></tr>
-        <tr><td>Refuerzo triple felina</td><td>18 nov 2026</td><td><span class="status soon">Programada</span></td></tr>
-      </tbody>
-    </table>
-    <p style="color:var(--ink-soft); font-size:13px; margin-top:18px;">Después de adoptar recibirás recordatorios de vacunas y citas veterinarias.</p>
+    <p style="color:var(--ink-soft); font-size:13px; margin-top:24px;">Próximamente: recordatorios de vacunas y citas veterinarias después de adoptar.</p>
   </section>
 
   <!-- MAPA -->
   <section class="screen" id="mapa">
     <div class="hero"><div><h2>Ayuda cerca de ti</h2><p>Veterinarias, refugios y centros de ayuda para animales en Tijuana.</p></div></div>
     <div class="chips" id="place-chips">
-      <button type="button" class="chip on" data-kind="todos">Todos</button>
-      <button type="button" class="chip" data-kind="veterinaria">Veterinarias</button>
-      <button type="button" class="chip" data-kind="refugio">Refugios</button>
-      <button type="button" class="chip" data-kind="centro_ayuda">Centros de ayuda</button>
+      <button type="button" class="chip on" data-kind="todos" aria-pressed="true">Todos</button>
+      <button type="button" class="chip" data-kind="veterinaria" aria-pressed="false">Veterinarias</button>
+      <button type="button" class="chip" data-kind="refugio" aria-pressed="false">Refugios</button>
+      <button type="button" class="chip" data-kind="centro_ayuda" aria-pressed="false">Centros de ayuda</button>
     </div>
     <div class="legend" aria-hidden="true">
       <span><i style="background:#3B5D42"></i>Veterinaria</span>
@@ -495,6 +510,15 @@
     toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
   }
 
+  async function withBusy(formId, label, fn){
+    const btn = document.querySelector("#" + formId + ' button[type="submit"]');
+    const prev = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = label; }
+    try { return await fn(); }
+    finally { if(btn){ btn.disabled = false; btn.textContent = prev; } }
+  }
+  function cap(t){ t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); }
+
   function friendlyError(e){
     const m = (e && e.message) || String(e);
     if(/invalid login/i.test(m)) return "Correo o contraseña incorrectos.";
@@ -502,6 +526,13 @@
     if(/not confirmed/i.test(m)) return "Confirma tu correo antes de entrar (revisa tu bandeja).";
     if(/row-level security/i.test(m)) return "No tienes permiso para hacer esto con tu cuenta actual.";
     if(/Failed to fetch|NetworkError/i.test(m)) return "No se pudo conectar. Revisa tu internet e inténtalo de nuevo.";
+    if(/duplicate key|unique/i.test(m)) return "Ya enviaste una solicitud por esta mascota.";
+    if(/at least 6|weak/i.test(m)) return "La contraseña debe tener al menos 6 caracteres.";
+    if(/rate limit|too many/i.test(m)) return "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
+    if(/^[\x20-\x7E]+$/.test(m) && /[a-z]{4,} [a-z]{2,}/i.test(m) && !/[áéíóúñ¿¡]/i.test(m) && !/^(La|El|Las|Los|No|Ya|Correo|Confirma|Demasiados|Solo|Las coordenadas)/.test(m)){
+      try { console.error(m); } catch(x) {}
+      return "Ocurrió un error inesperado. Inténtalo de nuevo en unos minutos.";
+    }
     return m;
   }
 
@@ -559,6 +590,14 @@
       async pendingPets(){ return ok(await sb.from("pets").select("*").eq("moderation","pendiente").order("created_at")); },
       async setModeration(id, moderation){ ok(await sb.from("pets").update({ moderation }).eq("id", id)); },
       async verifyProfile(id){ ok(await sb.from("profiles").update({ verified:true }).eq("id", id)); },
+      async withdrawPet(id){
+        const d = ok(await sb.from("pets").delete().eq("id", id).select());
+        if(!d.length) fail({ message:"row-level security" });
+      },
+      async cancelRequest(id){
+        const d = ok(await sb.from("adoption_requests").delete().eq("id", id).select());
+        if(!d.length) fail({ message:"row-level security" });
+      },
       async listPlaces(){ return ok(await sb.from("places").select("*").order("name")); },
       async addPlace(p){ return ok(await sb.from("places").insert(p).select().single()); },
       async deletePlace(id){ ok(await sb.from("places").delete().eq("id", id)); },
@@ -637,8 +676,8 @@
     $("org-field").style.display = role === "refugio" ? "flex" : "none";
   }
 
-  async function handleLogin(e){
-    e.preventDefault();
+  async function handleLogin(e){ e.preventDefault(); await withBusy("login-form", "Entrando…", handleLoginCore); }
+  async function handleLoginCore(){
     const errEl = $("login-error");
     errEl.textContent = "";
     if(!API){ errEl.textContent = "La base de datos no está configurada."; return; }
@@ -648,8 +687,8 @@
     } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
-  async function handleRegister(e){
-    e.preventDefault();
+  async function handleRegister(e){ e.preventDefault(); await withBusy("register-form", "Creando cuenta…", handleRegisterCore); }
+  async function handleRegisterCore(){
     const errEl = $("register-error");
     errEl.textContent = "";
     if(!API){ errEl.textContent = "La base de datos no está configurada."; return; }
@@ -678,7 +717,7 @@
       pendingPetId = null;
       await loadCatalog();
       const pet = catalog.find(p => p.id === id);
-      if(pet){ openPet(pet.id); goToSolicitud(); return; }
+      if(pet){ openPet(pet.id); await goToSolicitud(); return; }
     }
     await goTo("catalogo");
   }
@@ -710,7 +749,7 @@
 
   /* ====== CATÁLOGO ====== */
   function petCardHtml(p){
-    return '<article class="pet-card" data-id="' + esc(p.id) + '" data-species="' + esc(p.species) + '" data-size="' + esc(p.size) + '" data-depto="' + (p.apto_depto ? 1 : 0) + '">' +
+    return '<article class="pet-card" tabindex="0" role="button" aria-label="Ver a ' + esc(p.name) + '" data-name="' + esc(String(p.name).toLowerCase()) + '" data-id="' + esc(p.id) + '" data-species="' + esc(p.species) + '" data-size="' + esc(p.size) + '" data-depto="' + (p.apto_depto ? 1 : 0) + '">' +
       (p.tag ? '<span class="tag">' + esc(p.tag) + "</span>" : "") +
       '<img class="avatar-img" alt="' + esc(p.name) + '" src="' + esc(photoOf(p)) + '" loading="lazy" decoding="async" width="360" height="360">' +
       "<h3>" + esc(p.name) + '</h3><p class="pet-meta">' + esc(SPECIES_LABEL[p.species]) + " · " + esc(SIZE_LABEL[p.size]) + " · " + esc(p.age) + "</p></article>";
@@ -724,31 +763,47 @@
     catch(err){ catalog = []; toast(friendlyError(err)); }
     loading.style.display = "none";
     grid.innerHTML = catalog.map(petCardHtml).join("");
-    grid.querySelectorAll(".pet-card").forEach(card => card.addEventListener("click", () => openPet(card.dataset.id)));
-    document.querySelectorAll("#chips .chip").forEach(c => c.classList.toggle("on", c.dataset.filter === "todos"));
-    $("empty-msg").style.display = catalog.length ? "none" : "block";
-    $("empty-msg").textContent = catalog.length ? "" : "Aún no hay mascotas disponibles.";
+    grid.querySelectorAll(".pet-card").forEach(card => {
+      card.addEventListener("click", () => openPet(card.dataset.id));
+      card.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openPet(card.dataset.id); } });
+    });
+    petFilters = { species:null, size:null, depto:false, q:"" };
+    $("pet-search").value = "";
+    applyFilters();
+  }
+
+  let petFilters = { species:null, size:null, depto:false, q:"" };
+  function applyFilters(){
+    const f = petFilters;
+    let visible = 0;
+    document.querySelectorAll("#pet-grid .pet-card").forEach(card => {
+      const show = (!f.species || card.dataset.species === f.species) && (!f.size || card.dataset.size === f.size) &&
+        (!f.depto || card.dataset.depto === "1") && (!f.q || card.dataset.name.includes(f.q));
+      card.style.display = show ? "" : "none";
+      if(show) visible++;
+    });
+    document.querySelectorAll("#chips .chip").forEach(c => {
+      const v = c.dataset.filter;
+      const on = v === "todos" ? (!f.species && !f.size && !f.depto) : (v === "perro" || v === "gato") ? f.species === v : v === "depto" ? f.depto : f.size === v;
+      c.classList.toggle("on", on);
+      c.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    const empty = $("empty-msg");
+    empty.textContent = catalog.length ? "No hay mascotas que coincidan con estos filtros por ahora." : "Aún no hay mascotas disponibles.";
+    empty.style.display = visible === 0 ? "block" : "none";
   }
 
   document.querySelectorAll("#chips .chip").forEach(chip => {
     chip.addEventListener("click", () => {
-      document.querySelectorAll("#chips .chip").forEach(x => x.classList.remove("on"));
-      chip.classList.add("on");
-      const f = chip.dataset.filter;
-      let visible = 0;
-      document.querySelectorAll("#pet-grid .pet-card").forEach(card => {
-        let show = true;
-        if(f === "perro") show = card.dataset.species === "perro";
-        else if(f === "gato") show = card.dataset.species === "gato";
-        else if(f === "pequeno") show = card.dataset.size === "pequeno";
-        else if(f === "depto") show = card.dataset.depto === "1";
-        card.style.display = show ? "" : "none";
-        if(show) visible++;
-      });
-      $("empty-msg").textContent = "No hay mascotas que coincidan con este filtro por ahora.";
-      $("empty-msg").style.display = visible === 0 ? "block" : "none";
+      const v = chip.dataset.filter, f = petFilters;
+      if(v === "todos"){ f.species = null; f.size = null; f.depto = false; }
+      else if(v === "perro" || v === "gato") f.species = f.species === v ? null : v;
+      else if(v === "depto") f.depto = !f.depto;
+      else f.size = f.size === v ? null : v;
+      applyFilters();
     });
   });
+  $("pet-search").addEventListener("input", e => { petFilters.q = e.target.value.trim().toLowerCase(); applyFilters(); });
 
   function openPet(id){
     const p = catalog.find(x => x.id === id);
@@ -767,7 +822,7 @@
     showScreen("ficha");
   }
 
-  function goToSolicitud(){
+  async function goToSolicitud(){
     if(!session || session.role === "invitado"){
       pendingPetId = currentPet && currentPet.id;
       $("auth-subtitle").textContent = "Crea una cuenta para solicitar esta adopción.";
@@ -779,14 +834,21 @@
       toast("Solo las cuentas de adoptante pueden solicitar una adopción.");
       return;
     }
+    try {
+      const mine = await API.myRequests(session.id);
+      if(mine.some(r => r.pet_id === currentPet.id)){
+        toast("Ya enviaste una solicitud por " + currentPet.name + ". La ves en Mis solicitudes.");
+        return;
+      }
+    } catch(e) { /* si falla la consulta, la base de datos igual impide duplicados */ }
     $("solicitud-sub").textContent = "Solicitud para adoptar a " + currentPet.name + ".";
     $("solicitud-nombre").value = session.name;
     $("solicitud-error").textContent = "";
     showScreen("solicitud");
   }
 
-  async function handleSolicitud(e){
-    e.preventDefault();
+  async function handleSolicitud(e){ e.preventDefault(); await withBusy("solicitud-form", "Enviando…", handleSolicitudCore); }
+  async function handleSolicitudCore(){
     const errEl = $("solicitud-error");
     errEl.textContent = "";
     try {
@@ -808,8 +870,13 @@
       const rows = await API.myRequests(session.id);
       box.innerHTML = rows.length ? rows.map(r =>
         '<div class="req-item"><img alt="" src="' + esc(photoOf(r.pets)) + '"><div class="req-info"><b>' + esc(r.pets ? r.pets.name : "Mascota") + "</b>" +
-        "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + '</small></div><span class="badge ' + esc(r.status) + '">' + esc(r.status) + "</span></div>"
+        "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + '</small></div><span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>" +
+        (r.status === "pendiente" ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") + "</div>"
       ).join("") : '<p class="list-empty">Todavía no has enviado solicitudes. Explora el catálogo para empezar.</p>';
+      box.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", async () => {
+        if(!window.confirm("¿Cancelar esta solicitud?")) return;
+        try { await API.cancelRequest(b.dataset.cancel); toast("Solicitud cancelada."); await loadMyRequests(); } catch(err){ toast(friendlyError(err)); }
+      }));
     } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
   }
 
@@ -844,30 +911,34 @@
         '<div class="stat"><b>' + pending.length + "</b><span>Solicitudes pendientes</span></div>";
       pets.innerHTML = myPets.length ? myPets.map(p =>
         '<div class="req-item"><img alt="" src="' + esc(photoOf(p)) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
-        esc(p.status === "adoptada" ? "Adoptada" : "Disponible") + '</small></div><span class="badge ' + esc(p.moderation) + '">' + esc(p.moderation) + "</span></div>"
+        esc(p.status === "adoptada" ? "Adoptada" : "Disponible") + '</small></div><span class="badge ' + esc(p.moderation) + '">' + esc(cap(p.moderation)) + "</span>" +
+        (p.status === "disponible" ? '<div class="req-actions"><button class="decline" data-withdraw="' + esc(p.id) + '">Retirar</button></div>' : "") + "</div>"
       ).join("") : '<p class="list-empty">Aún no has publicado mascotas.</p>';
       reqs.innerHTML = received.length ? received.map(r =>
         '<div class="req-item"><div class="req-info"><b>' + esc(r.adopter_name) + "</b> quiere adoptar a <b>" + esc(r.pets ? r.pets.name : "") + "</b>" +
         "<small>" + esc(r.housing_type || "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") + "</small></div>" +
         (r.status === "pendiente"
           ? '<div class="req-actions"><button class="accept" data-id="' + esc(r.id) + '" data-st="aceptada">Aceptar</button><button class="decline" data-id="' + esc(r.id) + '" data-st="rechazada">Rechazar</button></div>'
-          : '<span class="badge ' + esc(r.status) + '">' + esc(r.status) + "</span>") + "</div>"
+          : '<span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>") + "</div>"
       ).join("") : '<p class="list-empty">Todavía no recibes solicitudes.</p>';
+      pets.querySelectorAll("[data-withdraw]").forEach(b => b.addEventListener("click", async () => {
+        if(!window.confirm("¿Retirar esta publicación? También se borrarán sus solicitudes.")) return;
+        try { await API.withdrawPet(b.dataset.withdraw); toast("Publicación retirada."); await loadPanel(); } catch(err){ toast(friendlyError(err)); }
+      }));
       reqs.querySelectorAll(".req-actions button").forEach(b => b.addEventListener("click", async () => {
         const req = received.find(r => r.id === b.dataset.id);
+        if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
         try { await API.respondRequest(req, b.dataset.st); toast("Solicitud " + b.dataset.st + "."); await loadPanel(); }
         catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ pets.innerHTML = reqs.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
   }
 
-  async function handlePublicar(e){
-    e.preventDefault();
+  async function handlePublicar(e){ e.preventDefault(); await withBusy("publicar-form", "Publicando…", handlePublicarCore); }
+  async function handlePublicarCore(){
     const errEl = $("publicar-error"), file = $("pub-photo").files[0];
     errEl.textContent = "";
     if(file && file.size > 3 * 1024 * 1024){ errEl.textContent = "La foto pesa más de 3 MB. Elige una más ligera."; return; }
-    const submit = $("publicar-submit");
-    submit.disabled = true;
     try {
       const pet = await API.createPet({
         name: $("pub-name").value.trim(), species: $("pub-species").value, size: $("pub-size").value, age: $("pub-age").value.trim(),
@@ -877,7 +948,6 @@
       $("publicar-form").reset();
       await goTo("panel");
     } catch(err){ errEl.textContent = friendlyError(err); }
-    submit.disabled = false;
   }
 
   /* ====== ADMINISTRADOR ====== */
@@ -935,11 +1005,14 @@
   function renderPlaces(){
     const list = $("places-list"), vis = visiblePlaces();
     list.innerHTML = vis.length ? vis.map(p =>
-      '<div class="req-item place-item" data-id="' + esc(p.id) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
+      '<div class="req-item place-item" tabindex="0" role="button" aria-label="Ver ' + esc(p.name) + ' en el mapa" data-id="' + esc(p.id) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
       esc(KIND_LABEL[p.kind]) + (p.address ? " · " + esc(p.address) : "") + (p.phone ? " · " + esc(p.phone) : "") + "</small></div>" +
       '<span class="badge" style="background:' + esc(KIND_COLOR[p.kind]) + ';color:#fff;">' + esc(KIND_LABEL[p.kind]) + "</span></div>"
     ).join("") : '<p class="list-empty">Todavía no hay lugares en esta categoría.</p>';
-    list.querySelectorAll(".place-item").forEach(el => el.addEventListener("click", () => focusPlace(el.dataset.id)));
+    list.querySelectorAll(".place-item").forEach(el => {
+      el.addEventListener("click", () => focusPlace(el.dataset.id));
+      el.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); focusPlace(el.dataset.id); } });
+    });
     if(map) drawMarkers();
   }
 
@@ -982,8 +1055,9 @@
 
   document.querySelectorAll("#place-chips .chip").forEach(chip => {
     chip.addEventListener("click", () => {
-      document.querySelectorAll("#place-chips .chip").forEach(x => x.classList.remove("on"));
+      document.querySelectorAll("#place-chips .chip").forEach(x => { x.classList.remove("on"); x.setAttribute("aria-pressed", "false"); });
       chip.classList.add("on");
+      chip.setAttribute("aria-pressed", "true");
       placeFilter = chip.dataset.kind;
       renderPlaces();
     });
@@ -999,6 +1073,7 @@
         '<div class="req-actions"><button class="decline" data-del="' + esc(p.id) + '">Eliminar</button></div></div>'
       ).join("") : '<p class="list-empty">Aún no has agregado lugares.</p>';
       box.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+        if(!window.confirm("¿Eliminar este lugar del mapa?")) return;
         try { await API.deletePlace(b.dataset.del); toast("Lugar eliminado."); await loadAdminPlaces(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
@@ -1016,8 +1091,8 @@
     } catch(err){ errEl.textContent = "No se pudo buscar la dirección. Escribe las coordenadas a mano."; }
   }
 
-  async function handlePlace(e){
-    e.preventDefault();
+  async function handlePlace(e){ e.preventDefault(); await withBusy("place-form", "Guardando…", handlePlaceCore); }
+  async function handlePlaceCore(){
     const errEl = $("place-error");
     errEl.textContent = "";
     const lat = Number($("pl-lat").value), lng = Number($("pl-lng").value);
