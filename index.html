@@ -208,6 +208,16 @@
   .list-empty{color:var(--ink-soft); font-size:14px; padding:10px 0;}
   .photo-hint{font-size:12px; color:var(--ink-soft); font-weight:500;}
   .account-type .radio-opt small{color:var(--ink-soft);}
+  .map-box{height:400px; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--paper-2); margin-bottom:18px; position:relative; z-index:0;}
+  .map-fallback{display:none; color:var(--ink-soft); font-size:13px; margin:-8px 0 14px;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;}
+  .legend i{display:inline-block; width:11px; height:11px; border-radius:50%; border:2px solid var(--ink); margin-right:5px; vertical-align:-1px;}
+  .place-item{cursor:pointer;}
+  .place-item:hover{background:var(--paper-2);}
+  .place-form{max-width:none; margin-top:10px;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .leaflet-popup-content{font-family:var(--font-body); color:#22271F;}
+  .leaflet-popup-content b{font-family:var(--font-head);}
 </style>
 </head>
 <body>
@@ -386,6 +396,25 @@
     <p style="color:var(--ink-soft); font-size:13px; margin-top:18px;">Después de adoptar recibirás recordatorios de vacunas y citas veterinarias.</p>
   </section>
 
+  <!-- MAPA -->
+  <section class="screen" id="mapa">
+    <div class="hero"><div><h2>Ayuda cerca de ti</h2><p>Veterinarias, refugios y centros de ayuda para animales en Tijuana.</p></div></div>
+    <div class="chips" id="place-chips">
+      <button type="button" class="chip on" data-kind="todos">Todos</button>
+      <button type="button" class="chip" data-kind="veterinaria">Veterinarias</button>
+      <button type="button" class="chip" data-kind="refugio">Refugios</button>
+      <button type="button" class="chip" data-kind="centro_ayuda">Centros de ayuda</button>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span><i style="background:#3B5D42"></i>Veterinaria</span>
+      <span><i style="background:#B5472F"></i>Refugio</span>
+      <span><i style="background:#D9A441"></i>Centro de ayuda</span>
+    </div>
+    <div class="map-box" id="map"></div>
+    <p class="map-fallback" id="map-fallback">No se pudo cargar el mapa. Aquí abajo sigue la lista de lugares.</p>
+    <div id="places-list"></div>
+  </section>
+
   <!-- ADMINISTRACION -->
   <section class="screen" id="admin">
     <div class="hero"><div><h2>Administración</h2><p>Verifica refugios y aprueba las publicaciones antes de que lleguen al catálogo.</p></div></div>
@@ -398,6 +427,25 @@
         <h3 class="section-title">Publicaciones por aprobar</h3>
         <div id="admin-pets"></div>
       </div>
+    </div>
+    <h3 class="section-title" style="margin-top:36px;">Lugares del mapa</h3>
+    <div class="panel-grid">
+      <form class="card place-form" id="place-form" onsubmit="handlePlace(event)">
+        <label>Nombre <input id="pl-name" type="text" required maxlength="80"></label>
+        <label>Tipo
+          <select id="pl-kind"><option value="veterinaria">Veterinaria</option><option value="refugio">Refugio</option><option value="centro_ayuda">Centro de ayuda</option></select>
+        </label>
+        <label>Dirección <input id="pl-address" type="text" maxlength="160" placeholder="Calle, número y colonia"></label>
+        <label>Teléfono <input id="pl-phone" type="tel" maxlength="30"></label>
+        <button type="button" class="btn btn-ghost" onclick="geocodePlace()">Buscar coordenadas por la dirección</button>
+        <div class="row2">
+          <label>Latitud <input id="pl-lat" type="number" step="any" required></label>
+          <label>Longitud <input id="pl-lng" type="number" step="any" required></label>
+        </div>
+        <p class="auth-error" id="place-error" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Agregar al mapa</button>
+      </form>
+      <div id="admin-places"></div>
     </div>
   </section>
 
@@ -421,11 +469,11 @@
   let catalog = [];
 
   const NAV_BY_ROLE = {
-    adoptante:  [{ id:"catalogo", label:"Explorar" }, { id:"seguimiento", label:"Mis solicitudes" }],
-    refugio:    [{ id:"catalogo", label:"Explorar" }, { id:"panel", label:"Mi panel" }],
-    rescatista: [{ id:"catalogo", label:"Explorar" }, { id:"panel", label:"Mi panel" }],
-    admin:      [{ id:"catalogo", label:"Explorar" }, { id:"admin", label:"Administración" }],
-    invitado:   [{ id:"catalogo", label:"Explorar" }]
+    adoptante:  [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"seguimiento", label:"Mis solicitudes" }],
+    refugio:    [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"panel", label:"Mi panel" }],
+    rescatista: [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"panel", label:"Mi panel" }],
+    admin:      [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"admin", label:"Administración" }],
+    invitado:   [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }]
   };
   const ROLE_LABEL = { adoptante:"Adoptante", refugio:"Refugio", rescatista:"Rescatista", admin:"Admin", invitado:"Invitado" };
   const SIZE_LABEL = { pequeno:"Pequeño", mediano:"Mediano", grande:"Grande" };
@@ -510,7 +558,15 @@
       async pendingRefuges(){ return ok(await sb.from("profiles").select("*").eq("role","refugio").eq("verified", false)); },
       async pendingPets(){ return ok(await sb.from("pets").select("*").eq("moderation","pendiente").order("created_at")); },
       async setModeration(id, moderation){ ok(await sb.from("pets").update({ moderation }).eq("id", id)); },
-      async verifyProfile(id){ ok(await sb.from("profiles").update({ verified:true }).eq("id", id)); }
+      async verifyProfile(id){ ok(await sb.from("profiles").update({ verified:true }).eq("id", id)); },
+      async listPlaces(){ return ok(await sb.from("places").select("*").order("name")); },
+      async addPlace(p){ return ok(await sb.from("places").insert(p).select().single()); },
+      async deletePlace(id){ ok(await sb.from("places").delete().eq("id", id)); },
+      async geocode(q){
+        const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=mx&viewbox=-117.3,32.65,-116.6,32.3&q=" + encodeURIComponent(q + ", Tijuana");
+        const j = await (await fetch(url)).json();
+        return j[0] ? { lat:Number(j[0].lat), lng:Number(j[0].lon) } : null;
+      }
     };
   }
 
@@ -544,6 +600,7 @@
     if(id === "catalogo") await loadCatalog();
     else if(id === "panel") await loadPanel();
     else if(id === "seguimiento") await loadMyRequests();
+    else if(id === "mapa") await loadMap();
     else if(id === "admin") await loadAdmin();
   }
 
@@ -827,6 +884,7 @@
   async function loadAdmin(){
     const refs = $("admin-refuges"), pets = $("admin-pets");
     refs.innerHTML = pets.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    loadAdminPlaces();
     try {
       const [refuges, pending] = await Promise.all([API.pendingRefuges(), API.pendingPets()]);
       refs.innerHTML = refuges.length ? refuges.map(r =>
@@ -844,6 +902,132 @@
         try { await API.setModeration(b.dataset.mod, b.dataset.st); toast("Publicación " + b.dataset.st + "."); await loadAdmin(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ refs.innerHTML = pets.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  /* ====== MAPA DE AYUDA ====== */
+  const KIND_LABEL = { veterinaria:"Veterinaria", refugio:"Refugio", centro_ayuda:"Centro de ayuda" };
+  const KIND_COLOR = { veterinaria:"#3B5D42", refugio:"#B5472F", centro_ayuda:"#D9A441" };
+  let places = [], placeFilter = "todos", map = null, markerLayer = null, markers = {}, leafletPromise = null;
+
+  function ensureLeaflet(){
+    if(window.L) return Promise.resolve(true);
+    if(!leafletPromise){
+      const css = document.createElement("link");
+      css.rel = "stylesheet"; css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+      leafletPromise = Promise.race([
+        loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"),
+        new Promise(r => setTimeout(() => r(false), 8000))
+      ]).then(ok => ok && !!window.L);
+    }
+    return leafletPromise;
+  }
+
+  function visiblePlaces(){ return places.filter(p => placeFilter === "todos" || p.kind === placeFilter); }
+
+  function popupHtml(p){
+    const tel = (p.phone || "").replace(/[^0-9+]/g, "");
+    return "<b>" + esc(p.name) + "</b><br>" + esc(KIND_LABEL[p.kind]) +
+      (p.address ? "<br>" + esc(p.address) : "") +
+      (tel ? '<br><a href="tel:' + esc(tel) + '">' + esc(p.phone) + "</a>" : "");
+  }
+
+  function renderPlaces(){
+    const list = $("places-list"), vis = visiblePlaces();
+    list.innerHTML = vis.length ? vis.map(p =>
+      '<div class="req-item place-item" data-id="' + esc(p.id) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
+      esc(KIND_LABEL[p.kind]) + (p.address ? " · " + esc(p.address) : "") + (p.phone ? " · " + esc(p.phone) : "") + "</small></div>" +
+      '<span class="badge" style="background:' + esc(KIND_COLOR[p.kind]) + ';color:#fff;">' + esc(KIND_LABEL[p.kind]) + "</span></div>"
+    ).join("") : '<p class="list-empty">Todavía no hay lugares en esta categoría.</p>';
+    list.querySelectorAll(".place-item").forEach(el => el.addEventListener("click", () => focusPlace(el.dataset.id)));
+    if(map) drawMarkers();
+  }
+
+  function drawMarkers(){
+    markerLayer.clearLayers(); markers = {};
+    const vis = visiblePlaces();
+    vis.forEach(p => {
+      const m = L.circleMarker([p.lat, p.lng], { radius:10, color:"#22271F", weight:2, fillColor:KIND_COLOR[p.kind], fillOpacity:.95 }).bindPopup(popupHtml(p));
+      m.addTo(markerLayer); markers[p.id] = m;
+    });
+    if(vis.length) map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(.25), { maxZoom:15 });
+  }
+
+  function initMap(){
+    if(!map){
+      map = L.map("map").setView([32.5149, -117.0382], 12);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+    }
+    map.invalidateSize();
+    drawMarkers();
+  }
+
+  function focusPlace(id){
+    const p = places.find(x => x.id === id);
+    if(!p || !map || !markers[id]) return;
+    $("map").scrollIntoView({ behavior:"smooth", block:"center" });
+    map.setView([p.lat, p.lng], 16);
+    markers[id].openPopup();
+  }
+
+  async function loadMap(){
+    $("places-list").innerHTML = '<p class="loading-msg">Cargando lugares…</p>';
+    try { places = API ? await API.listPlaces() : []; } catch(err){ places = []; toast(friendlyError(err)); }
+    renderPlaces();
+    ensureLeaflet().then(ok => {
+      if(ok) initMap(); else $("map-fallback").style.display = "block";
+    });
+  }
+
+  document.querySelectorAll("#place-chips .chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("#place-chips .chip").forEach(x => x.classList.remove("on"));
+      chip.classList.add("on");
+      placeFilter = chip.dataset.kind;
+      renderPlaces();
+    });
+  });
+
+  /* ====== ADMIN: LUGARES ====== */
+  async function loadAdminPlaces(){
+    const box = $("admin-places");
+    try {
+      const rows = await API.listPlaces();
+      box.innerHTML = rows.length ? rows.map(p =>
+        '<div class="req-item"><div class="req-info"><b>' + esc(p.name) + "</b><small>" + esc(KIND_LABEL[p.kind]) + (p.address ? " · " + esc(p.address) : "") + "</small></div>" +
+        '<div class="req-actions"><button class="decline" data-del="' + esc(p.id) + '">Eliminar</button></div></div>'
+      ).join("") : '<p class="list-empty">Aún no has agregado lugares.</p>';
+      box.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+        try { await API.deletePlace(b.dataset.del); toast("Lugar eliminado."); await loadAdminPlaces(); } catch(err){ toast(friendlyError(err)); }
+      }));
+    } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  async function geocodePlace(){
+    const errEl = $("place-error"), q = $("pl-address").value.trim() || $("pl-name").value.trim();
+    errEl.textContent = "";
+    if(!q){ errEl.textContent = "Escribe la dirección o el nombre del lugar."; return; }
+    try {
+      const r = await API.geocode(q);
+      if(!r){ errEl.textContent = "No encontramos esa dirección. Agrega colonia o escribe las coordenadas a mano."; return; }
+      $("pl-lat").value = r.lat.toFixed(6); $("pl-lng").value = r.lng.toFixed(6);
+      toast("Coordenadas encontradas. Revísalas en el mapa antes de guardar.");
+    } catch(err){ errEl.textContent = "No se pudo buscar la dirección. Escribe las coordenadas a mano."; }
+  }
+
+  async function handlePlace(e){
+    e.preventDefault();
+    const errEl = $("place-error");
+    errEl.textContent = "";
+    const lat = Number($("pl-lat").value), lng = Number($("pl-lng").value);
+    if(!(lat >= 14 && lat <= 33 && lng >= -119 && lng <= -86)){ errEl.textContent = "Las coordenadas no parecen estar en México. Revisa latitud y longitud."; return; }
+    try {
+      await API.addPlace({ name:$("pl-name").value.trim(), kind:$("pl-kind").value, address:$("pl-address").value.trim() || null, phone:$("pl-phone").value.trim() || null, lat, lng });
+      toast("Lugar agregado al mapa.");
+      $("place-form").reset();
+      await loadAdminPlaces();
+    } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
   window.__pawcloudReady = bootSession();

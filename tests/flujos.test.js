@@ -20,7 +20,7 @@ const SEED = [
 }));
 
 function makeFakeApi() {
-  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [] };
+  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
   let n = 0, current = null;
   const me = () => db.users.find((u) => u.id === current);
   const must = (c, m) => { if (!c) throw new Error(m); };
@@ -63,6 +63,10 @@ function makeFakeApi() {
     async pendingPets() { return db.pets.filter((p) => p.moderation === "pendiente"); },
     async setModeration(id, m) { db.pets.find((p) => p.id === id).moderation = m; },
     async verifyProfile(id) { db.users.find((u) => u.id === id).verified = true; },
+    async listPlaces() { return db.places.slice(); },
+    async addPlace(p) { const row = { id: "pl" + ++n, ...p }; db.places.push(row); return row; },
+    async deletePlace(id) { db.places = db.places.filter((p) => p.id !== id); },
+    async geocode(q) { return /nada/i.test(q) ? null : { lat: 32.5149, lng: -117.0382 }; },
   };
   return api;
 }
@@ -124,7 +128,7 @@ test("un invitado puede explorar pero no solicitar sin crear cuenta", async () =
 test("registrar un adoptante lo lleva al catálogo con su menú", async () => {
   await register("adoptante", "Ana Prueba", "ana@correo.com");
   assert.equal(activeScreen(), "catalogo");
-  assert.deepEqual(navLabels(), ["Explorar", "Mis solicitudes"]);
+  assert.deepEqual(navLabels(), ["Explorar", "Mapa", "Mis solicitudes"]);
 });
 
 test("un invitado que se registra retoma la solicitud de la mascota elegida", async () => {
@@ -203,6 +207,42 @@ test("el refugio acepta una solicitud y la mascota sale del catálogo", async ()
   doc.querySelector(".req-actions .accept").click();
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "adoptada");
+});
+
+test("un invitado ve la lista de lugares del mapa y la puede filtrar", async () => {
+  api.db.places.push({ id: "pl9", name: "Refugio Demo", kind: "refugio", address: null, phone: null, lat: 32.5, lng: -117.0 });
+  await win.continueAsGuest();
+  assert.deepEqual(navLabels(), ["Explorar", "Mapa"]);
+  await win.goTo("mapa");
+  assert.equal(activeScreen(), "mapa");
+  assert.equal(doc.querySelectorAll("#places-list .place-item").length, 2);
+  doc.querySelector('#place-chips .chip[data-kind="refugio"]').click();
+  assert.equal(doc.querySelectorAll("#places-list .place-item").length, 1);
+});
+
+test("el admin agrega y elimina un lugar del mapa", async () => {
+  api.db.users.push({ id: "admin1", email: "admin@x.com", password: "pw", name: "Admin", role: "admin", verified: true });
+  set("login-email", "admin@x.com"); set("login-password", "pw");
+  await win.handleLogin(ev);
+  set("pl-name", "Clínica Nueva"); set("pl-address", "Av. Revolución 100");
+  await win.geocodePlace();
+  assert.equal(doc.getElementById("pl-lat").value, "32.514900");
+  await win.handlePlace(ev);
+  assert.equal(api.db.places.length, 2);
+  assert.match(doc.getElementById("admin-places").textContent, /Clínica Nueva/);
+  doc.querySelector('[data-del="' + api.db.places[1].id + '"]').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(api.db.places.length, 1);
+});
+
+test("coordenadas fuera de México se rechazan", async () => {
+  api.db.users.push({ id: "admin1", email: "admin@x.com", password: "pw", name: "Admin", role: "admin", verified: true });
+  set("login-email", "admin@x.com"); set("login-password", "pw");
+  await win.handleLogin(ev);
+  set("pl-name", "X"); set("pl-lat", "10"); set("pl-lng", "10");
+  await win.handlePlace(ev);
+  assert.match(doc.getElementById("place-error").textContent, /México/);
+  assert.equal(api.db.places.length, 1);
 });
 
 test("credenciales incorrectas muestran un mensaje claro", async () => {
