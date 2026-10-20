@@ -98,8 +98,30 @@ const register = async (role, name, email, org) => {
   await win.handleRegister(ev);
 };
 
-test("al abrir el sitio se muestra la pantalla de acceso", () => {
+test("al abrir el sitio se muestra la pantalla de inicio", () => {
+  assert.equal(activeScreen(), "inicio");
+  assert.ok(doc.querySelector("#inicio h2").textContent.length > 20);
+  assert.equal(doc.querySelectorAll("#inicio .steps li").length, 3);
+});
+
+test("desde el inicio se llega al registro, al login y al catálogo", async () => {
+  doc.querySelector('#inicio .cta-row .btn-ghost').click();
   assert.equal(activeScreen(), "auth");
+  assert.equal(doc.getElementById("register-form").style.display, "flex");
+  await win.endSession();
+  assert.equal(activeScreen(), "inicio");
+  doc.querySelector("#inicio .link-btn").click();
+  assert.equal(doc.getElementById("login-form").style.display, "flex");
+  await win.endSession();
+  doc.querySelector("#inicio .btn-primary").click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(activeScreen(), "catalogo");
+});
+
+test("el enlace para dar una mascota en adopción preselecciona rescatista", () => {
+  doc.querySelector("#inicio .rescue-strip .btn").click();
+  assert.equal(activeScreen(), "auth");
+  assert.equal(doc.querySelector('input[name="reg-role"]:checked').value, "rescatista");
 });
 
 test("el catálogo se carga desde la base de datos con las 10 mascotas", async () => {
@@ -317,6 +339,7 @@ test("coordenadas fuera de México se rechazan", async () => {
 test("credenciales incorrectas muestran un mensaje claro", async () => {
   await register("adoptante", "Ana", "ana@correo.com");
   await win.endSession();
+  win.goAuth("login");
   set("login-email", "ana@correo.com"); set("login-password", "mala");
   await win.handleLogin(ev);
   assert.match(doc.getElementById("login-error").textContent, /incorrectos/);
