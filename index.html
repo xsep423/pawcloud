@@ -246,6 +246,23 @@
   .steps span{font-size:15px; line-height:1.5; color:var(--ink-soft);}
   .rescue-strip{margin-top:28px; border:1.5px dashed var(--ink); border-radius:var(--radius); padding:20px 24px; display:flex; justify-content:space-between; align-items:center; gap:18px; flex-wrap:wrap;}
   .rescue-strip p{margin:0; font-size:16px; max-width:56ch; line-height:1.5;}
+  /* v7: seguimiento posterior a la adopción */
+  .care-pet{border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--card); padding:18px 20px; margin-bottom:18px;}
+  .care-head{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:6px;}
+  .care-head img{width:64px; height:64px; object-fit:cover; border-radius:var(--radius); flex:none;}
+  .care-head h3{font-family:var(--font-head); font-size:20px; margin:0;}
+  .care-head small{display:block; color:var(--ink-soft); font-size:13px;}
+  .care-head .grow{flex:1; min-width:180px;}
+  .badge.hecho{background:var(--forest); color:#fff;}
+  .badge.vencido{background:var(--clay); color:#fff;}
+  .badge.proximo{background:var(--mustard); color:var(--ink);}
+  .badge.programado{background:var(--line); color:var(--ink);}
+  .care-tip{color:var(--ink-soft); font-size:14px; line-height:1.55;}
+  .care-pet .req-item{flex-wrap:wrap;}
+  .care-pet .req-info{min-width:220px;}
+  @media(max-width:560px){ .care-pet .req-info{flex-basis:100%;} .care-head .btn{width:100%;} }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .req-actions .decline{color:#E8917C;} }
+  :root[data-theme="dark"] .req-actions .decline{color:#E8917C;}
   @media(max-width:720px){
     .landing{grid-template-columns:1fr; gap:28px;}
     .collage{height:260px;}
@@ -293,7 +310,7 @@
     <ol class="steps">
       <li><b>1. Explora</b><span>Filtra por especie, tamaño o si se adapta a un departamento, y busca por nombre.</span></li>
       <li><b>2. Solicita</b><span>Crea tu cuenta de adoptante y cuéntale a quien la cuida cómo sería su hogar.</span></li>
-      <li><b>3. Sigue tu solicitud</b><span>Consulta si fue aceptada. El seguimiento de vacunas y citas llegará después.</span></li>
+      <li><b>3. Cuídala después</b><span>Cuando aceptan tu solicitud, registra sus vacunas, desparasitación y citas, y ve qué cuidado sigue.</span></li>
     </ol>
     <div class="rescue-strip">
       <p>¿Rescataste un animal o diriges un refugio? Publícalo en PawCloud. Un administrador revisa cada publicación antes de mostrarla.</p>
@@ -377,6 +394,7 @@
       <details><summary>¿Cómo adopto una mascota?</summary><p>Crea una cuenta de adoptante, elige una mascota, llena la solicitud y espera la respuesta de quien la cuida. Puedes ver el estado en Mis solicitudes.</p></details>
       <details><summary>¿Qué pasa después de enviar mi solicitud?</summary><p>Le llega a quien publicó la mascota, que puede aceptarla o rechazarla. Verás el cambio de estado en Mis solicitudes.</p></details>
       <details><summary>¿Quién revisa las publicaciones?</summary><p>Un administrador verifica a los refugios, y las publicaciones de particulares se aprueban antes de aparecer en el catálogo.</p></details>
+      <details><summary>¿Qué pasa después de adoptar?</summary><p>La mascota aparece en Mis mascotas, donde registras sus vacunas, desparasitación y citas. Quien te la dio en adopción puede ver cuántos cuidados llevas.</p></details>
       <details><summary>Quiero dar una mascota en adopción</summary><p>Crea una cuenta de rescatista (si eres particular) o de refugio, y publica desde Mi panel.</p></details>
     </div>
   </section>
@@ -457,7 +475,33 @@
   <section class="screen" id="seguimiento">
     <div class="hero"><div><h2>Mis solicitudes</h2><p>Aquí ves el estado de cada adopción que pediste.</p></div></div>
     <div id="my-requests"></div>
-    <p style="color:var(--ink-soft); font-size:13px; margin-top:24px;">Próximamente: recordatorios de vacunas y citas veterinarias después de adoptar.</p>
+    <p class="care-tip" style="margin-top:24px;">Cuando aceptan una solicitud, la mascota aparece en <button type="button" class="link-btn" onclick="goTo('mismascotas')">Mis mascotas</button> para llevar su seguimiento de vacunas y citas.</p>
+  </section>
+
+  <!-- MIS MASCOTAS (seguimiento posterior a la adopción) -->
+  <section class="screen" id="mismascotas">
+    <div class="hero"><div><h2>Mis mascotas</h2><p>Registra las vacunas, la desparasitación y las citas de las mascotas que adoptaste, y ve qué cuidado sigue.</p></div></div>
+    <div class="stat-row" id="care-stats"></div>
+    <div id="care-pets"></div>
+    <div class="panel-grid" id="care-tools">
+      <form class="card" id="care-form" onsubmit="handleCare(event)">
+        <h3 class="section-title">Agregar un cuidado</h3>
+        <label>Mascota <select id="care-pet"></select></label>
+        <label>Tipo
+          <select id="care-kind"><option value="vacuna">Vacuna</option><option value="desparasitacion">Desparasitación</option><option value="esterilizacion">Esterilización</option><option value="cita">Cita veterinaria</option><option value="otro">Otro</option></select>
+        </label>
+        <label>Descripción <input id="care-title" type="text" required maxlength="80" placeholder="Ej. Vacuna antirrábica"></label>
+        <label>Fecha <input id="care-date" type="date" required></label>
+        <label>Notas <textarea id="care-notes" maxlength="300" placeholder="Veterinaria, indicaciones, próxima dosis..."></textarea></label>
+        <p class="auth-error" id="care-error" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Guardar cuidado</button>
+      </form>
+      <div>
+        <h3 class="section-title">¿Por dónde empezar?</h3>
+        <p class="care-tip">Si tu mascota aún no tiene cuidados registrados, usa <b>Agregar plan básico</b>: agenda una primera revisión veterinaria, la revisión de su cartilla de vacunación y una desparasitación. Son recordatorios generales; confirma fechas y dosis con tu veterinario.</p>
+        <p class="care-tip">¿Todavía no tienes veterinaria? <button type="button" class="link-btn" onclick="goTo('mapa')">Ver veterinarias en el mapa</button></p>
+      </div>
+    </div>
   </section>
 
   <!-- MAPA -->
@@ -533,7 +577,7 @@
   let catalog = [];
 
   const NAV_BY_ROLE = {
-    adoptante:  [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"seguimiento", label:"Mis solicitudes" }],
+    adoptante:  [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"seguimiento", label:"Mis solicitudes" }, { id:"mismascotas", label:"Mis mascotas" }],
     refugio:    [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"panel", label:"Mi panel" }],
     rescatista: [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"panel", label:"Mi panel" }],
     admin:      [{ id:"catalogo", label:"Explorar" }, { id:"mapa", label:"Mapa" }, { id:"admin", label:"Administración" }],
@@ -647,6 +691,14 @@
         const d = ok(await sb.from("adoption_requests").delete().eq("id", id).select());
         if(!d.length) fail({ message:"row-level security" });
       },
+      async myAdoptions(uid){
+        return ok(await sb.from("adoption_requests").select("pet_id, pets(id, name, photo_url, owner_name, species)").eq("adopter_id", uid).eq("status", "aceptada"));
+      },
+      async listCare(uid){ return ok(await sb.from("care_events").select("*").eq("adopter_id", uid).order("event_date")); },
+      async addCare(rows){ return ok(await sb.from("care_events").insert(rows).select()); },
+      async setCareDone(id, done){ ok(await sb.from("care_events").update({ done }).eq("id", id)); },
+      async deleteCare(id){ ok(await sb.from("care_events").delete().eq("id", id)); },
+      async careForPets(ids){ return ids.length ? ok(await sb.from("care_events").select("pet_id, done, event_date").in("pet_id", ids)) : []; },
       async listPlaces(){ return ok(await sb.from("places").select("*").order("name")); },
       async addPlace(p){ return ok(await sb.from("places").insert(p).select().single()); },
       async deletePlace(id){ ok(await sb.from("places").delete().eq("id", id)); },
@@ -688,6 +740,7 @@
     if(id === "catalogo") await loadCatalog();
     else if(id === "panel") await loadPanel();
     else if(id === "seguimiento") await loadMyRequests();
+    else if(id === "mismascotas") await loadCare();
     else if(id === "mapa") await loadMap();
     else if(id === "admin") await loadAdmin();
   }
@@ -930,8 +983,10 @@
       box.innerHTML = rows.length ? rows.map(r =>
         '<div class="req-item"><img alt="" src="' + esc(photoOf(r.pets)) + '"><div class="req-info"><b>' + esc(r.pets ? r.pets.name : "Mascota") + "</b>" +
         "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + '</small></div><span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>" +
-        (r.status === "pendiente" ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") + "</div>"
+        (r.status === "pendiente" ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") +
+        (r.status === "aceptada" ? '<div class="req-actions"><button class="accept" data-care="1">Ver seguimiento</button></div>' : "") + "</div>"
       ).join("") : '<p class="list-empty">Todavía no has enviado solicitudes. Explora el catálogo para empezar.</p>';
+      box.querySelectorAll("[data-care]").forEach(b => b.addEventListener("click", () => goTo("mismascotas")));
       box.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", async () => {
         if(!window.confirm("¿Cancelar esta solicitud?")) return;
         try { await API.cancelRequest(b.dataset.cancel); toast("Solicitud cancelada."); await loadMyRequests(); } catch(err){ toast(friendlyError(err)); }
@@ -964,13 +1019,20 @@
     try {
       const [myPets, received] = await Promise.all([API.myPets(session.id), API.receivedRequests(session.id)]);
       const pending = received.filter(r => r.status === "pendiente");
+      const adoptedIds = myPets.filter(p => p.status === "adoptada").map(p => p.id);
+      let care = [];
+      try { care = await API.careForPets(adoptedIds); } catch(e) { care = []; }
+      const careLine = id => {
+        const ev = care.filter(c => c.pet_id === id);
+        return ev.length ? " · Seguimiento: " + ev.filter(c => c.done).length + " de " + ev.length + " cuidados hechos" : " · Seguimiento: sin registros aún";
+      };
       $("panel-stats").innerHTML =
         '<div class="stat"><b>' + myPets.length + "</b><span>Mascotas publicadas</span></div>" +
         '<div class="stat"><b>' + myPets.filter(p => p.status === "adoptada").length + "</b><span>Adoptadas</span></div>" +
         '<div class="stat"><b>' + pending.length + "</b><span>Solicitudes pendientes</span></div>";
       pets.innerHTML = myPets.length ? myPets.map(p =>
         '<div class="req-item"><img alt="" src="' + esc(photoOf(p)) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
-        esc(p.status === "adoptada" ? "Adoptada" : "Disponible") + '</small></div><span class="badge ' + esc(p.moderation) + '">' + esc(cap(p.moderation)) + "</span>" +
+        esc(p.status === "adoptada" ? "Adoptada" + careLine(p.id) : "Disponible") + '</small></div><span class="badge ' + esc(p.moderation) + '">' + esc(cap(p.moderation)) + "</span>" +
         (p.status === "disponible" ? '<div class="req-actions"><button class="decline" data-withdraw="' + esc(p.id) + '">Retirar</button></div>' : "") + "</div>"
       ).join("") : '<p class="list-empty">Aún no has publicado mascotas.</p>';
       reqs.innerHTML = received.length ? received.map(r =>
@@ -1031,6 +1093,103 @@
         try { await API.setModeration(b.dataset.mod, b.dataset.st); toast("Publicación " + b.dataset.st + "."); await loadAdmin(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ refs.innerHTML = pets.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  /* ====== ADOPTANTE: SEGUIMIENTO POSTERIOR A LA ADOPCIÓN ====== */
+  const CARE_KIND = { vacuna:"Vacuna", desparasitacion:"Desparasitación", esterilizacion:"Esterilización", cita:"Cita veterinaria", otro:"Otro" };
+  const CARE_STATE = { hecho:"Hecho", vencido:"Vencido", proximo:"Próximo", programado:"Programado" };
+  let adopted = [], careEvents = [];
+
+  function isoDay(d){ const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); }
+  function addDays(n){ const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d); }
+  function careState(e){
+    if(e.done) return "hecho";
+    const today = isoDay(new Date());
+    if(e.event_date < today) return "vencido";
+    return e.event_date <= addDays(7) ? "proximo" : "programado";
+  }
+  function fmtDay(iso){
+    const m = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    return Number(iso.slice(8, 10)) + " " + m[Number(iso.slice(5, 7)) - 1] + " " + iso.slice(0, 4);
+  }
+
+  async function loadCare(){
+    const box = $("care-pets");
+    box.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    try {
+      const [rows, ev] = await Promise.all([API.myAdoptions(session.id), API.listCare(session.id)]);
+      adopted = rows.map(r => r.pets).filter(Boolean);
+      careEvents = ev;
+    } catch(err){ adopted = []; careEvents = []; box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; $("care-tools").style.display = "none"; $("care-stats").innerHTML = ""; return; }
+    renderCare();
+  }
+
+  function renderCare(){
+    const box = $("care-pets"), tools = $("care-tools");
+    if(!adopted.length){
+      $("care-stats").innerHTML = "";
+      tools.style.display = "none";
+      box.innerHTML = '<p class="list-empty">Aún no tienes adopciones aceptadas. Cuando un refugio acepte tu solicitud, tu mascota aparecerá aquí para que lleves su seguimiento.</p>';
+      return;
+    }
+    tools.style.display = "";
+    const states = careEvents.map(careState);
+    $("care-stats").innerHTML =
+      '<div class="stat"><b>' + adopted.length + "</b><span>Mascotas adoptadas</span></div>" +
+      '<div class="stat"><b>' + states.filter(s => s === "proximo").length + "</b><span>Cuidados en los próximos 7 días</span></div>" +
+      '<div class="stat"><b>' + states.filter(s => s === "vencido").length + "</b><span>Cuidados vencidos</span></div>" +
+      '<div class="stat"><b>' + states.filter(s => s === "hecho").length + "</b><span>Cuidados hechos</span></div>";
+    box.innerHTML = adopted.map(p => {
+      const ev = careEvents.filter(e => e.pet_id === p.id);
+      const next = ev.find(e => !e.done);
+      return '<div class="care-pet" data-pet="' + esc(p.id) + '"><div class="care-head"><img alt="" src="' + esc(photoOf(p)) + '"><div class="grow"><h3>' + esc(p.name) + "</h3><small>Adoptada de " + esc(p.owner_name || "un particular") +
+        (next ? " · Siguiente: " + esc(next.title) + " el " + esc(fmtDay(next.event_date)) : ev.length ? " · Todo al día" : "") + "</small></div>" +
+        (ev.length ? "" : '<button type="button" class="btn btn-ghost" data-plan="' + esc(p.id) + '">Agregar plan básico</button>') + "</div>" +
+        (ev.length ? ev.map(e => {
+          const st = careState(e);
+          return '<div class="req-item"><div class="req-info"><b>' + esc(e.title) + "</b><small>" + esc(CARE_KIND[e.kind] || "") + " · " + esc(fmtDay(e.event_date)) + (e.notes ? " · " + esc(e.notes) : "") + "</small></div>" +
+            '<span class="badge ' + st + '">' + CARE_STATE[st] + "</span>" +
+            '<div class="req-actions"><button class="accept" data-done="' + esc(e.id) + '" data-val="' + (e.done ? 0 : 1) + '">' + (e.done ? "Deshacer" : "Marcar hecho") + '</button><button class="decline" data-delcare="' + esc(e.id) + '">Eliminar</button></div></div>';
+        }).join("") : '<p class="list-empty">Sin cuidados registrados todavía.</p>') + "</div>";
+    }).join("");
+    $("care-pet").innerHTML = adopted.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + "</option>").join("");
+    if(!$("care-date").value) $("care-date").value = addDays(0);
+    box.querySelectorAll("[data-plan]").forEach(b => b.addEventListener("click", () => addBasicPlan(b.dataset.plan)));
+    box.querySelectorAll("[data-done]").forEach(b => b.addEventListener("click", async () => {
+      try { await API.setCareDone(b.dataset.done, b.dataset.val === "1"); await loadCare(); } catch(err){ toast(friendlyError(err)); }
+    }));
+    box.querySelectorAll("[data-delcare]").forEach(b => b.addEventListener("click", async () => {
+      if(!window.confirm("¿Eliminar este cuidado?")) return;
+      try { await API.deleteCare(b.dataset.delcare); toast("Cuidado eliminado."); await loadCare(); } catch(err){ toast(friendlyError(err)); }
+    }));
+  }
+
+  async function addBasicPlan(petId){
+    const base = { pet_id:petId, adopter_id:session.id, done:false, notes:"Recordatorio sugerido; confirma la fecha con tu veterinario." };
+    try {
+      await API.addCare([
+        Object.assign({}, base, { kind:"cita", title:"Primera revisión veterinaria", event_date:addDays(7) }),
+        Object.assign({}, base, { kind:"vacuna", title:"Revisar cartilla de vacunación", event_date:addDays(21) }),
+        Object.assign({}, base, { kind:"desparasitacion", title:"Desparasitación", event_date:addDays(30) })
+      ]);
+      toast("Plan básico agregado.");
+      await loadCare();
+    } catch(err){ toast(friendlyError(err)); }
+  }
+
+  async function handleCare(e){ e.preventDefault(); await withBusy("care-form", "Guardando…", handleCareCore); }
+  async function handleCareCore(){
+    const errEl = $("care-error");
+    errEl.textContent = "";
+    const date = $("care-date").value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ errEl.textContent = "Elige una fecha."; return; }
+    try {
+      await API.addCare([{ pet_id:$("care-pet").value, adopter_id:session.id, kind:$("care-kind").value, title:$("care-title").value.trim(),
+        event_date:date, done:false, notes:$("care-notes").value.trim() || null }]);
+      toast("Cuidado guardado.");
+      $("care-title").value = ""; $("care-notes").value = "";
+      await loadCare();
+    } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
   /* ====== MAPA DE AYUDA ====== */

@@ -1,11 +1,12 @@
 -- =========================================================
--- PawCloud — esquema de base de datos (v2) para Supabase
+-- PawCloud — esquema de base de datos (v7) para Supabase
 -- Pégalo completo en: Supabase > SQL Editor > New query > Run
 -- Es seguro volver a correrlo: borra y recrea las tablas de PawCloud.
 -- =========================================================
 
 -- ---------- Limpieza (para poder re-ejecutar) ----------
 drop trigger if exists on_auth_user_created on auth.users;
+drop table if exists public.care_events cascade;
 drop table if exists public.adoption_requests cascade;
 drop table if exists public.pets cascade;
 drop table if exists public.places cascade;
@@ -178,6 +179,43 @@ create policy "dueno responde solicitud" on public.adoption_requests for update
 -- places: lectura pública, escritura solo admin
 create policy "mapa publico" on public.places for select using (true);
 create policy "admin gestiona lugares" on public.places for all using (public.is_admin()) with check (public.is_admin());
+
+-- ---------- Seguimiento posterior a la adopción ----------
+-- Cuidados de cada mascota adoptada: vacunas, desparasitación, esterilización y citas
+create table if not exists public.care_events (
+  id uuid primary key default gen_random_uuid(),
+  pet_id uuid not null references public.pets(id) on delete cascade,
+  adopter_id uuid not null references public.profiles(id) on delete cascade,
+  kind text not null check (kind in ('vacuna','desparasitacion','esterilizacion','cita','otro')),
+  title text not null check (char_length(title) between 1 and 80),
+  event_date date not null,
+  done boolean not null default false,
+  notes text check (notes is null or char_length(notes) <= 300),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists care_events_adopter on public.care_events (adopter_id, event_date);
+create index if not exists care_events_pet on public.care_events (pet_id);
+
+alter table public.care_events enable row level security;
+
+-- El adoptante gestiona el seguimiento SOLO de mascotas cuya adopción fue aceptada
+drop policy if exists "adoptante gestiona su seguimiento" on public.care_events;
+create policy "adoptante gestiona su seguimiento" on public.care_events for all
+  using (adopter_id = auth.uid())
+  with check (
+    adopter_id = auth.uid() and exists (
+      select 1 from public.adoption_requests r
+      where r.pet_id = care_events.pet_id and r.adopter_id = auth.uid() and r.status = 'aceptada')
+  );
+
+-- Quien dio la mascota en adopción y el admin pueden consultar el seguimiento
+drop policy if exists "dueno y admin ven seguimiento" on public.care_events;
+create policy "dueno y admin ven seguimiento" on public.care_events for select
+  using (
+    public.is_admin()
+    or exists (select 1 from public.pets p where p.id = care_events.pet_id and p.owner_id = auth.uid())
+  );
 
 -- ---------- Almacenamiento de fotos ----------
 insert into storage.buckets (id, name, public)

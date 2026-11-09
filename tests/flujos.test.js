@@ -20,7 +20,7 @@ const SEED = [
 }));
 
 function makeFakeApi() {
-  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
+  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], care: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
   let n = 0, current = null;
   const me = () => db.users.find((u) => u.id === current);
   const must = (c, m) => { if (!c) throw new Error(m); };
@@ -65,6 +65,17 @@ function makeFakeApi() {
     async verifyProfile(id) { db.users.find((u) => u.id === id).verified = true; },
     async withdrawPet(id) { db.pets = db.pets.filter((p) => p.id !== id); db.reqs = db.reqs.filter((r) => r.pet_id !== id); },
     async cancelRequest(id) { db.reqs = db.reqs.filter((r) => r.id !== id); },
+    async myAdoptions(uid) {
+      return db.reqs.filter((r) => r.adopter_id === uid && r.status === "aceptada").map((r) => ({ pet_id: r.pet_id, pets: db.pets.find((p) => p.id === r.pet_id) }));
+    },
+    async listCare(uid) { return db.care.filter((c) => c.adopter_id === uid).sort((a, b) => a.event_date.localeCompare(b.event_date)); },
+    async addCare(rows) {
+      rows.forEach((r) => must(r.adopter_id === current && db.reqs.some((q) => q.pet_id === r.pet_id && q.adopter_id === current && q.status === "aceptada"), "row-level security"));
+      const out = rows.map((r) => ({ id: "c" + ++n, ...r })); db.care.push(...out); return out;
+    },
+    async setCareDone(id, done) { db.care.find((c) => c.id === id).done = done; },
+    async deleteCare(id) { db.care = db.care.filter((c) => c.id !== id); },
+    async careForPets(ids) { return db.care.filter((c) => ids.includes(c.pet_id)); },
     async listPlaces() { return db.places.slice(); },
     async addPlace(p) { const row = { id: "pl" + ++n, ...p }; db.places.push(row); return row; },
     async deletePlace(id) { db.places = db.places.filter((p) => p.id !== id); },
@@ -174,7 +185,7 @@ test("un invitado puede explorar pero no solicitar sin crear cuenta", async () =
 test("registrar un adoptante lo lleva al catálogo con su menú", async () => {
   await register("adoptante", "Ana Prueba", "ana@correo.com");
   assert.equal(activeScreen(), "catalogo");
-  assert.deepEqual(navLabels(), ["Explorar", "Mapa", "Mis solicitudes"]);
+  assert.deepEqual(navLabels(), ["Explorar", "Mapa", "Mis solicitudes", "Mis mascotas"]);
 });
 
 test("un invitado que se registra retoma la solicitud de la mascota elegida", async () => {
@@ -355,4 +366,73 @@ test("el texto escrito por usuarios no se ejecuta como HTML", async () => {
 test("las fotos son archivos externos y el HTML pesa menos de 100 KB", () => {
   assert.ok(!/data:image\/jpeg;base64/.test(html));
   assert.ok(Buffer.byteLength(html) < 100 * 1024);
+});
+
+// ---------- Seguimiento posterior a la adopción ----------
+const tick = () => new Promise((r) => setTimeout(r, 20));
+const adoptedBy = async (name, email) => {
+  await register("adoptante", name, email);
+  const me = api.db.users.find((u) => u.email === email);
+  api.db.reqs.push({ id: "rqA", pet_id: "seed3", adopter_id: me.id, adopter_name: name, status: "aceptada", created_at: new Date().toISOString() });
+  api.db.pets.find((p) => p.id === "seed3").status = "adoptada";
+  return me;
+};
+
+test("sin adopciones aceptadas, Mis mascotas explica qué esperar", async () => {
+  await register("adoptante", "Ana", "ana@correo.com");
+  await win.goTo("mismascotas");
+  assert.equal(activeScreen(), "mismascotas");
+  assert.match(doc.getElementById("care-pets").textContent, /Aún no tienes adopciones aceptadas/);
+  assert.equal(doc.getElementById("care-tools").style.display, "none");
+});
+
+test("una solicitud aceptada lleva al seguimiento de la mascota adoptada", async () => {
+  await adoptedBy("Ana", "ana@correo.com");
+  await win.goTo("seguimiento");
+  assert.match(doc.getElementById("my-requests").textContent, /Aceptada/);
+  doc.querySelector("[data-care]").click();
+  await tick();
+  assert.equal(activeScreen(), "mismascotas");
+  assert.match(doc.getElementById("care-pets").textContent, /Luna/);
+});
+
+test("el plan básico agenda 3 cuidados y se pueden marcar como hechos", async () => {
+  await adoptedBy("Ana", "ana@correo.com");
+  await win.goTo("mismascotas");
+  doc.querySelector("[data-plan]").click();
+  await tick();
+  assert.equal(api.db.care.length, 3);
+  assert.match(doc.getElementById("care-pets").textContent, /Primera revisión veterinaria/);
+  assert.match(doc.getElementById("care-pets").textContent, /Próximo/);
+  doc.querySelector("[data-done]").click();
+  await tick();
+  assert.equal(api.db.care.filter((c) => c.done).length, 1);
+  assert.match(doc.getElementById("care-stats").textContent, /1Cuidados hechos/);
+});
+
+test("el adoptante registra un cuidado propio y uno vencido se marca como vencido", async () => {
+  await adoptedBy("Ana", "ana@correo.com");
+  await win.goTo("mismascotas");
+  set("care-kind", "vacuna"); set("care-title", "Vacuna antirrábica"); set("care-date", "2020-01-15");
+  await win.handleCare(ev);
+  assert.equal(api.db.care.length, 1);
+  assert.equal(api.db.care[0].pet_id, "seed3");
+  assert.match(doc.getElementById("care-pets").textContent, /Vacuna antirrábica/);
+  assert.match(doc.getElementById("care-pets").textContent, /Vencido/);
+});
+
+test("no se puede registrar seguimiento de una mascota no adoptada", async () => {
+  const me = await adoptedBy("Ana", "ana@correo.com");
+  await assert.rejects(api.addCare([{ pet_id: "seed0", adopter_id: me.id, kind: "cita", title: "x", event_date: "2026-12-01" }]), /row-level security/);
+});
+
+test("el refugio ve cuántos cuidados lleva cada mascota adoptada", async () => {
+  await register("refugio", "Rosa", "rosa@refugio.com", "Huellas AC");
+  const rosa = api.db.users.find((u) => u.email === "rosa@refugio.com");
+  rosa.verified = true;
+  api.db.pets.push({ ...SEED[0], id: "petR", name: "Bruno", owner_id: rosa.id, status: "adoptada" });
+  api.db.care.push({ id: "k1", pet_id: "petR", adopter_id: "x", kind: "cita", title: "Revisión", event_date: "2026-11-01", done: true },
+    { id: "k2", pet_id: "petR", adopter_id: "x", kind: "vacuna", title: "Vacuna", event_date: "2026-12-01", done: false });
+  await win.goTo("panel");
+  assert.match(doc.getElementById("panel-pets").textContent, /Seguimiento: 1 de 2 cuidados hechos/);
 });
