@@ -30,6 +30,27 @@ https://benevolent-fairy-cf7335.netlify.app/
 
 - `supabase/schema.sql`: esquema completo (borra y recrea las tablas; solo para un proyecto nuevo).
 - `supabase/migracion_v5.sql` y `supabase/migracion_v6_seguimiento.sql`: cambios incrementales que **no** borran datos.
+- `supabase/datos_demo.sql`: datos de demostración para ver la plataforma en uso (ver abajo).
+
+### Datos de demostración
+
+`supabase/datos_demo.sql` carga 16 cuentas, 29 mascotas nuevas con fotos reales (`images/mascotas/`), solicitudes en todos los estados y seguimiento de cuatro adopciones. Se corre en el SQL Editor después del esquema; se puede repetir y no toca cuentas reales (solo las de `@pawcloud.test`). Las personas, los refugios y las historias son ficticios; los créditos de las fotos están en `images/mascotas/CREDITOS.md`.
+
+Contraseña de todas las cuentas demo: `PawCloud2026`
+
+| Rol | Correo | Para ver |
+| --- | --- | --- |
+| Admin | `coordinacion@pawcloud.test` | Refugio por verificar, 2 publicaciones por moderar, todas las solicitudes |
+| Refugio | `huellas@pawcloud.test` | Refugio Huellas de Tijuana: 11 mascotas, solicitudes pendientes, seguimiento de Bruno |
+| Refugio | `rescatefelino@pawcloud.test` | Rescate Felino BC: 11 gatos |
+| Refugio | `patitasfelices@pawcloud.test` | Patitas Felices A.C.: 9 perros |
+| Refugio | `albergueotay@pawcloud.test` | Albergue Canino Otay, aún sin verificar |
+| Rescatista | `daniela.castro@pawcloud.test` | Publicaciones aprobadas y una en revisión |
+| Adoptante | `carlos.martinez@pawcloud.test` | Adoptó a Bruno: seguimiento con un cuidado vencido |
+| Adoptante | `paola.jimenez@pawcloud.test` | Adoptó a Toby: seguimiento casi completo |
+| Adoptante | `alejandro.vega@pawcloud.test` | Solicitudes pendientes y una rechazada |
+
+Otras cuentas: `luisf.ramirez`, `sofia.mendez` (rescatistas); `valeria.torres`, `diego.navarro`, `fernanda.ortiz`, `ricardo.flores`, `anasofia.guerrero` (adoptantes).
 
 ## Integración continua
 
