@@ -536,6 +536,10 @@
         <div id="admin-pets"></div>
       </div>
     </div>
+    <h3 class="section-title" style="margin-top:36px;">Solicitudes de adopción</h3>
+    <p class="care-tip" style="margin:0 0 10px;">Las solicitudes de mascotas sin responsable (como las de ejemplo) o publicadas por ti las respondes aquí. Las demás las responde el refugio o rescatista que publicó la mascota; aquí solo las supervisas.</p>
+    <div class="stat-row" id="admin-req-stats"></div>
+    <div id="admin-requests"></div>
     <h3 class="section-title" style="margin-top:36px;">Lugares del mapa</h3>
     <div class="panel-grid">
       <form class="card place-form" id="place-form" onsubmit="handlePlace(event)">
@@ -680,6 +684,9 @@
         if(status === "aceptada") ok(await sb.from("pets").update({ status:"adoptada" }).eq("id", req.pet_id));
       },
       async pendingRefuges(){ return ok(await sb.from("profiles").select("*").eq("role","refugio").eq("verified", false)); },
+      async allRequests(){
+        return ok(await sb.from("adoption_requests").select("*, pets(name, owner_id, owner_name, photo_url)").order("created_at", { ascending:false }));
+      },
       async pendingPets(){ return ok(await sb.from("pets").select("*").eq("moderation","pendiente").order("created_at")); },
       async setModeration(id, moderation){ ok(await sb.from("pets").update({ moderation }).eq("id", id)); },
       async verifyProfile(id){ ok(await sb.from("profiles").update({ verified:true }).eq("id", id)); },
@@ -1076,6 +1083,7 @@
     const refs = $("admin-refuges"), pets = $("admin-pets");
     refs.innerHTML = pets.innerHTML = '<p class="loading-msg">Cargando…</p>';
     loadAdminPlaces();
+    loadAdminRequests();
     try {
       const [refuges, pending] = await Promise.all([API.pendingRefuges(), API.pendingPets()]);
       refs.innerHTML = refuges.length ? refuges.map(r =>
@@ -1093,6 +1101,32 @@
         try { await API.setModeration(b.dataset.mod, b.dataset.st); toast("Publicación " + b.dataset.st + "."); await loadAdmin(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ refs.innerHTML = pets.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  async function loadAdminRequests(){
+    const box = $("admin-requests");
+    box.innerHTML = '<p class="loading-msg">Cargando…</p>';
+    try {
+      const rows = await API.allRequests();
+      const mine = r => !r.pets || !r.pets.owner_id || r.pets.owner_id === session.id;
+      $("admin-req-stats").innerHTML =
+        '<div class="stat"><b>' + rows.length + "</b><span>Solicitudes en total</span></div>" +
+        '<div class="stat"><b>' + rows.filter(r => r.status === "pendiente").length + "</b><span>Pendientes</span></div>" +
+        '<div class="stat"><b>' + rows.filter(r => r.status === "pendiente" && mine(r)).length + "</b><span>Pendientes que te tocan</span></div>";
+      box.innerHTML = rows.length ? rows.map(r => {
+        const pet = r.pets || {}, who = pet.owner_id ? (pet.owner_id === session.id ? "Publicada por ti" : "La responde " + (pet.owner_name || "quien la publicó")) : "Sin responsable: la respondes tú";
+        return '<div class="req-item"><img alt="" src="' + esc(photoOf(pet)) + '"><div class="req-info"><b>' + esc(r.adopter_name || "Adoptante") + "</b> quiere adoptar a <b>" + esc(pet.name || "") + "</b>" +
+          "<small>" + esc(who) + " · " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + (r.housing_type ? " · " + esc(r.housing_type) : "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") + "</small></div>" +
+          (r.status === "pendiente" && mine(r)
+            ? '<div class="req-actions"><button class="accept" data-areq="' + esc(r.id) + '" data-st="aceptada">Aceptar</button><button class="decline" data-areq="' + esc(r.id) + '" data-st="rechazada">Rechazar</button></div>'
+            : '<span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>") + "</div>";
+      }).join("") : '<p class="list-empty">Todavía no hay solicitudes de adopción.</p>';
+      box.querySelectorAll("[data-areq]").forEach(b => b.addEventListener("click", async () => {
+        const req = rows.find(r => r.id === b.dataset.areq);
+        if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
+        try { await API.respondRequest(req, b.dataset.st); toast("Solicitud " + b.dataset.st + "."); await loadAdminRequests(); } catch(err){ toast(friendlyError(err)); }
+      }));
+    } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
   }
 
   /* ====== ADOPTANTE: SEGUIMIENTO POSTERIOR A LA ADOPCIÓN ====== */

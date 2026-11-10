@@ -11,7 +11,7 @@ https://benevolent-fairy-cf7335.netlify.app/
 ## Qué hace
 
 - **Catálogo** de mascotas de refugios y rescatistas, con búsqueda y filtros por especie, tamaño y si se adapta a departamento.
-- **Cuatro roles:** adoptante, rescatista, refugio (verificado por un administrador) y administrador.
+- **Cuatro roles:** adoptante, rescatista, refugio (verificado por un administrador) y administrador, que además supervisa todas las solicitudes y responde las de mascotas sin responsable.
 - **Adopción completa:** publicar, moderar, solicitar, aceptar o rechazar, y cancelar o retirar.
 - **Seguimiento posterior a la adopción:** el adoptante registra vacunas, desparasitación, esterilización y citas de su mascota, con estados (hecho, próximo, vencido) y un plan básico sugerido. El refugio ve cuántos cuidados lleva cada mascota que dio en adopción.
 - **Mapa "Ayuda cerca de ti"** con 20 veterinarias, refugios y centros de ayuda reales de Tijuana, administrable desde el panel del admin.
@@ -36,7 +36,7 @@ https://benevolent-fairy-cf7335.netlify.app/
 Cada push a `main` y cada pull request ejecutan:
 
 1. Validación de HTML (`npm run lint`).
-2. 31 pruebas de flujo (`npm test`) con jsdom y un simulador de la base de datos con las mismas reglas que Supabase.
+2. 32 pruebas de flujo (`npm test`) con jsdom y un simulador de la base de datos con las mismas reglas que Supabase.
 3. Lighthouse CI (rendimiento, accesibilidad, buenas prácticas y SEO).
 
 En local: `npm install`, `npm run lint` y `npm test`.

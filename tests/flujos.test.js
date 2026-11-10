@@ -60,6 +60,7 @@ function makeFakeApi() {
       if (status === "aceptada") db.pets.find((p) => p.id === req.pet_id).status = "adoptada";
     },
     async pendingRefuges() { return db.users.filter((u) => u.role === "refugio" && !u.verified); },
+    async allRequests() { return db.reqs.map((r) => ({ ...r, pets: db.pets.find((p) => p.id === r.pet_id) })); },
     async pendingPets() { return db.pets.filter((p) => p.moderation === "pendiente"); },
     async setModeration(id, m) { db.pets.find((p) => p.id === id).moderation = m; },
     async verifyProfile(id) { db.users.find((u) => u.id === id).verified = true; },
@@ -435,4 +436,24 @@ test("el refugio ve cuántos cuidados lleva cada mascota adoptada", async () => 
     { id: "k2", pet_id: "petR", adopter_id: "x", kind: "vacuna", title: "Vacuna", event_date: "2026-12-01", done: false });
   await win.goTo("panel");
   assert.match(doc.getElementById("panel-pets").textContent, /Seguimiento: 1 de 2 cuidados hechos/);
+});
+
+test("el admin ve las solicitudes y responde las de mascotas sin responsable", async () => {
+  api.db.users.push({ id: "admin1", email: "admin@x.com", password: "pw", name: "Admin", role: "admin", verified: true });
+  api.db.users.push({ id: "ref1", email: "r@x.com", password: "pw", name: "Rosa", role: "refugio", org_name: "Huellas", verified: true });
+  api.db.pets.push({ ...SEED[0], id: "petR", name: "Bruno", owner_id: "ref1", owner_name: "Huellas" });
+  api.db.reqs.push({ id: "q1", pet_id: "seed2", adopter_id: "u9", adopter_name: "Mariana", status: "pendiente", created_at: new Date().toISOString() },
+    { id: "q2", pet_id: "petR", adopter_id: "u9", adopter_name: "Mariana", status: "pendiente", created_at: new Date().toISOString() });
+  set("login-email", "admin@x.com"); set("login-password", "pw");
+  await win.handleLogin(ev);
+  await tick();
+  const box = doc.getElementById("admin-requests");
+  assert.match(box.textContent, /Mariana quiere adoptar a Toby/);
+  assert.match(box.textContent, /La responde Huellas/);
+  assert.equal(box.querySelectorAll("[data-areq]").length, 2, "solo la de Toby tiene botones (aceptar y rechazar)");
+  box.querySelector('[data-areq="q1"][data-st="aceptada"]').click();
+  await tick();
+  assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "aceptada");
+  assert.equal(api.db.pets.find((p) => p.id === "seed2").status, "adoptada");
+  assert.equal(api.db.reqs.find((r) => r.id === "q2").status, "pendiente");
 });
