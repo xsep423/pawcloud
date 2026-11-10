@@ -238,7 +238,7 @@ insert into public.pets (owner_name, name, species, size, age, description, phot
 ('Rescate Felino BC','Coco','gato','mediano','2 años','Coco es tranquila y elegante, disfruta de siestas largas. Requiere cepillado semanal por su pelaje largo.','images/persian.jpg',true,null,'aprobada'),
 ('Patitas Felices A.C.','Thor','perro','grande','4 años','Thor es protector, inteligente y obediente. Ya tiene entrenamiento básico y se lleva bien con otros perros grandes.','images/shepherd.jpg',false,null,'aprobada'),
 ('Rescate Felino BC','Cleo','gato','pequeno','2 años','Cleo es activa y vocal, le gusta jugar con pelotas y perseguir luces. Se adapta rápido a hogares con otras mascotas.','images/egyptian.jpg',true,null,'aprobada'),
-('Refugio Huellas de Tijuana','Nieve','perro','grande','2 años','Nieve es vivaz y necesita mucho ejercicio. Es vocal y muy sociable, perfecta para dueños con experiencia en razas activas.','images/husky.jpg',false,'Nuevo','aprobada');
+('Refugio Huellas de Tijuana','Nieve','perro','grande','2 años','Nieve es una husky siberiana joven de pelaje cobrizo y blanco, vivaz y con mucha energía. Necesita ejercicio diario, es vocal y muy sociable; perfecta para dueños con experiencia en razas activas.','images/husky.jpg',false,'Nuevo','aprobada');
 
 -- ---------- Crear al administrador ----------
 -- 1) Regístrate en el sitio con tu correo (como "adoptante").

@@ -35,3 +35,4 @@ Los nombres y las historias de las mascotas son ficticios: son datos de demostra
 | `rizos.jpg` | Rhododendrites | CC BY-SA 4.0 | [Cavapoo male (90675).jpg](https://commons.wikimedia.org/wiki/File:Cavapoo_male_(90675).jpg) |
 | `frida.jpg` | Tsaag Valren | CC BY-SA 4.0 | [French bulldog head, Josselin 02.jpg](https://commons.wikimedia.org/wiki/File:French_bulldog_head,_Josselin_02.jpg) |
 | `../golden.jpg` (Sol y portada) | Dietmar Rabich | CC BY-SA 4.0 | [Dülmen, Hausdülmen, Golden Retriever -- 2022 -- 6055.jpg](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Hausd%C3%BClmen,_Golden_Retriever_--_2022_--_6055.jpg) |
+| `../husky.jpg` (Nieve) | MrPanyGoff | CC BY-SA 3.0 | [Juvenile Siberian Husky.jpg](https://commons.wikimedia.org/wiki/File:Juvenile_Siberian_Husky.jpg) |
