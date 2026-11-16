@@ -182,6 +182,9 @@
   .radio-opt input{ width:auto; }
   .auth-error{ color:var(--clay-dk); font-size:12.5px; margin:-4px 0 0; min-height:14px; }
   .guest-link{ margin-top:16px; }
+  .auth-help{ font-size:13px; color:var(--ink-soft); margin:0; text-align:left; }
+  .auth-ok{ color:var(--forest); font-size:13px; font-weight:600; margin:-4px 0 0; text-align:left; }
+  .auth-ok:empty{ display:none; }
   .fine-print{ font-size:11.5px; color:var(--ink-soft); margin-top:14px; }
 
   ::selection{background:var(--mustard); color:var(--ink);}
@@ -356,7 +359,7 @@
         <p id="auth-subtitle">Inicia sesión o crea una cuenta para continuar.</p>
         <div class="config-warn" id="config-warn">La conexión con la base de datos no está configurada todavía. Pega tu URL y tu anon key de Supabase en el bloque de configuración de index.html.</div>
 
-        <div class="auth-tabs">
+        <div class="auth-tabs" id="auth-tabs">
           <button type="button" class="auth-tab on" data-tab="login" onclick="switchAuthTab('login')">Iniciar sesión</button>
           <button type="button" class="auth-tab" data-tab="register" onclick="switchAuthTab('register')">Crear cuenta</button>
         </div>
@@ -366,6 +369,24 @@
           <label>Contraseña <input id="login-password" type="password" autocomplete="current-password" required></label>
           <p class="auth-error" id="login-error" role="alert"></p>
           <button class="btn btn-primary" type="submit">Entrar</button>
+          <button type="button" class="link-btn" onclick="switchAuthTab('reset')">¿Olvidaste tu contraseña?</button>
+        </form>
+
+        <form id="reset-form" class="card auth-form" style="display:none;" onsubmit="handleReset(event)">
+          <p class="auth-help">Escribe el correo de tu cuenta y te enviaremos un enlace para crear una contraseña nueva.</p>
+          <label>Correo electrónico <input id="reset-email" type="email" autocomplete="email" required></label>
+          <p class="auth-error" id="reset-error" role="alert"></p>
+          <p class="auth-ok" id="reset-ok" role="status"></p>
+          <button class="btn btn-primary" type="submit">Enviar enlace</button>
+          <button type="button" class="link-btn" onclick="switchAuthTab('login')">← Volver a iniciar sesión</button>
+        </form>
+
+        <form id="newpass-form" class="card auth-form" style="display:none;" onsubmit="handleNewPassword(event)">
+          <p class="auth-help">Elige tu contraseña nueva. Debe tener al menos 6 caracteres.</p>
+          <label>Contraseña nueva <input id="newpass-1" type="password" minlength="6" autocomplete="new-password" required></label>
+          <label>Repite la contraseña <input id="newpass-2" type="password" minlength="6" autocomplete="new-password" required></label>
+          <p class="auth-error" id="newpass-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit">Guardar contraseña</button>
         </form>
 
         <form id="register-form" class="card auth-form" style="display:none;" onsubmit="handleRegister(event)">
@@ -382,7 +403,7 @@
           <button class="btn btn-primary" type="submit">Crear cuenta</button>
         </form>
 
-        <div class="guest-link">
+        <div class="guest-link" id="guest-link">
           <button type="button" class="link-btn" onclick="continueAsGuest()">Seguir explorando sin cuenta →</button>
         </div>
         <p class="fine-print">Cuidamos a las mascotas: los refugios son verificados por un administrador, y las publicaciones de particulares se revisan antes de aparecer en el catálogo.</p>
@@ -596,6 +617,7 @@
   };
 </script>
 <script>
+  const RECOVERY_HASH = (window.location.hash || "").replace(/^#/, "");
   let API = null;            // capa de datos (Supabase, o un simulador en las pruebas)
   let session = null;        // perfil: { id, name, role, org_name, verified } | { role:'invitado' }
   let pendingPetId = null;   // mascota que el invitado quería solicitar antes de registrarse
@@ -647,6 +669,9 @@
     if(/Failed to fetch|NetworkError/i.test(m)) return "No se pudo conectar. Revisa tu internet e inténtalo de nuevo.";
     if(/duplicate key|unique/i.test(m)) return "Ya enviaste una solicitud por esta mascota.";
     if(/at least 6|weak/i.test(m)) return "La contraseña debe tener al menos 6 caracteres.";
+    if(/different from the old/i.test(m)) return "La contraseña nueva debe ser distinta a la anterior.";
+    if(/session missing|expired|invalid.*(token|link)/i.test(m)) return "El enlace ya no es válido. Pide uno nuevo desde “¿Olvidaste tu contraseña?”.";
+    if(/security purposes|only request this after/i.test(m)) return "Acabas de pedir un enlace. Espera un minuto antes de pedir otro.";
     if(/rate limit|too many/i.test(m)) return "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
     if(/^[\x20-\x7E]+$/.test(m) && /[a-z]{4,} [a-z]{2,}/i.test(m) && !/[áéíóúñ¿¡]/i.test(m) && !/^(La|El|Las|Los|No|Ya|Correo|Confirma|Demasiados|Solo|Las coordenadas)/.test(m)){
       try { console.error(m); } catch(x) {}
@@ -678,6 +703,14 @@
       },
       async refreshProfile(uid){ return profileOf(uid); },
       async signOut(){ await sb.auth.signOut(); },
+      async sendReset(email){
+        const r = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+        if(r.error) fail(r.error);
+      },
+      async updatePassword(password){
+        const r = await sb.auth.updateUser({ password });
+        if(r.error) fail(r.error);
+      },
       async listPets(){
         return ok(await sb.from("pets").select("*").eq("moderation","aprobada").eq("status","disponible")
           .order("created_at", { ascending:false }).order("name"));
@@ -799,8 +832,13 @@
   /* ====== AUTENTICACIÓN ====== */
   function switchAuthTab(tab){
     document.querySelectorAll(".auth-tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-    $("login-form").style.display = tab === "login" ? "flex" : "none";
-    $("register-form").style.display = tab === "register" ? "flex" : "none";
+    ["login", "register", "reset", "newpass"].forEach(t => { $(t + "-form").style.display = t === tab ? "flex" : "none"; });
+    // Al crear la contraseña nueva no se ofrecen otras salidas
+    $("auth-tabs").style.display = $("guest-link").style.display = tab === "newpass" ? "none" : "";
+    if(tab === "reset"){
+      $("reset-error").textContent = $("reset-ok").textContent = "";
+      if(!$("reset-email").value) $("reset-email").value = $("login-email").value.trim();
+    }
   }
   function toggleOrgField(){
     const role = document.querySelector('input[name="reg-role"]:checked').value;
@@ -825,6 +863,45 @@
     try {
       const profile = await API.signIn($("login-email").value.trim().toLowerCase(), $("login-password").value);
       await enterSession(profile);
+    } catch(err){ errEl.textContent = friendlyError(err); }
+  }
+
+  /* ====== RECUPERAR CONTRASEÑA ====== */
+  async function handleReset(e){ e.preventDefault(); await withBusy("reset-form", "Enviando…", handleResetCore); }
+  async function handleResetCore(){
+    const errEl = $("reset-error"), okEl = $("reset-ok");
+    errEl.textContent = okEl.textContent = "";
+    if(!API){ errEl.textContent = "La base de datos no está configurada."; return; }
+    try {
+      await API.sendReset($("reset-email").value.trim().toLowerCase());
+      // Mismo mensaje exista o no la cuenta, para no revelar qué correos están registrados
+      okEl.textContent = "Si hay una cuenta con ese correo, te llegará un enlace en unos minutos. Revisa también la carpeta de spam.";
+    } catch(err){ errEl.textContent = friendlyError(err); }
+  }
+
+  let recoveryProfile = null;   // perfil de quien llegó desde el enlace del correo
+  function showNewPassword(profile){
+    recoveryProfile = profile;
+    $("auth-subtitle").textContent = "Crea una contraseña nueva para tu cuenta.";
+    $("newpass-form").reset(); $("newpass-error").textContent = "";
+    switchAuthTab("newpass");
+    showScreen("auth");
+  }
+  async function handleNewPassword(e){ e.preventDefault(); await withBusy("newpass-form", "Guardando…", handleNewPasswordCore); }
+  async function handleNewPasswordCore(){
+    const errEl = $("newpass-error"), p1 = $("newpass-1").value, p2 = $("newpass-2").value;
+    errEl.textContent = "";
+    if(p1.length < 6){ errEl.textContent = "La contraseña debe tener al menos 6 caracteres."; return; }
+    if(p1 !== p2){ errEl.textContent = "Las contraseñas no coinciden."; return; }
+    try {
+      await API.updatePassword(p1);
+      const profile = recoveryProfile || await API.currentProfile();
+      recoveryProfile = null;
+      $("newpass-form").reset();
+      $("auth-subtitle").textContent = "Inicia sesión o crea una cuenta para continuar.";
+      switchAuthTab("login");
+      toast("Contraseña actualizada. Ya puedes usarla para entrar.");
+      if(profile) await enterSession(profile); else showScreen("auth");
     } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
@@ -866,8 +943,16 @@
   async function bootSession(){
     API = await getApi();
     if(!API){ $("config-warn").style.display = "block"; return; }
+    const fromEmail = /(^|&)type=recovery(&|$)/.test(RECOVERY_HASH), badLink = /(^|&)error(_code)?=/.test(RECOVERY_HASH);
     try {
       const profile = await API.currentProfile();
+      if(fromEmail && profile && !badLink){ showNewPassword(profile); return; }
+      if(badLink || fromEmail){
+        // Enlace vencido o ya usado: se ofrece pedir otro
+        goAuth("login"); switchAuthTab("reset");
+        $("reset-error").textContent = "El enlace venció o ya se usó. Pide uno nuevo.";
+        return;
+      }
       if(profile) await enterSession(profile);
     } catch(e) { /* sin sesión previa: se queda en la pantalla de acceso */ }
   }
@@ -882,7 +967,7 @@
     try { if(API) await API.signOut(); } catch(e) {}
     session = null; pendingPetId = null; catalog = [];
     renderNav();
-    $("login-error").textContent = ""; $("register-error").textContent = "";
+    $("login-error").textContent = ""; $("register-error").textContent = ""; recoveryProfile = null;
     $("auth-subtitle").textContent = "Inicia sesión o crea una cuenta para continuar.";
     switchAuthTab("login");
     showScreen("inicio");

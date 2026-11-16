@@ -212,6 +212,12 @@ insert into public.adoption_requests (pet_id, adopter_id, adopter_name, housing_
 ('de000000-0000-4000-9000-000000000025', 'de000000-0000-4000-8000-000000000014', 'Paola Jiménez Duarte', 'Casa sin patio', 'Toby (pug)',
   'Me mudé a una casa más grande y quiero un hermano para Toby.', 'pendiente', now() - interval '2 days' - interval '280 minutes');
 
+-- Solicitud demo en periodo de prueba (Fernanda y Rizos): aprobada hace 6 días, prueba de 15 días en curso
+update public.adoption_requests
+   set status = 'periodo_prueba', created_at = now() - interval '9 days',
+       reviewed_at = now() - interval '8 days', approved_at = now() - interval '6 days', trial_until = current_date + 10
+ where pet_id = 'de000000-0000-4000-9000-000000000028' and adopter_id = 'de000000-0000-4000-8000-000000000012';
+
 -- ---------- 5) Seguimiento posterior a la adopción ----------
 insert into public.care_events (pet_id, adopter_id, kind, title, event_date, done, notes) values
 ('de000000-0000-4000-9000-000000000002', 'de000000-0000-4000-8000-000000000009', 'cita', 'Primera revisión veterinaria', current_date + -33, true, 'Todo bien. Peso: 24 kg.'),
@@ -224,7 +230,7 @@ insert into public.care_events (pet_id, adopter_id, kind, title, event_date, don
 ('de000000-0000-4000-9000-000000000013', 'de000000-0000-4000-8000-000000000011', 'cita', 'Primera revisión veterinaria', current_date + -24, true, 'Sano, 31 kg.'),
 ('de000000-0000-4000-9000-000000000013', 'de000000-0000-4000-8000-000000000011', 'vacuna', 'Vacuna múltiple anual', current_date + -10, true, null),
 ('de000000-0000-4000-9000-000000000013', 'de000000-0000-4000-8000-000000000011', 'desparasitacion', 'Desparasitación trimestral', current_date + 20, false, null),
-('de000000-0000-4000-9000-000000000028', 'de000000-0000-4000-8000-000000000012', 'cita', 'Primera revisión veterinaria', current_date + -18, true, null),
+('de000000-0000-4000-9000-000000000028', 'de000000-0000-4000-8000-000000000012', 'cita', 'Primera revisión veterinaria', current_date + -4, true, null),
 ('de000000-0000-4000-9000-000000000028', 'de000000-0000-4000-8000-000000000012', 'vacuna', 'Revisar cartilla de vacunación', current_date + -2, false, 'Llevar la cartilla que dio la rescatista.'),
 ('de000000-0000-4000-9000-000000000028', 'de000000-0000-4000-8000-000000000012', 'otro', 'Corte de pelo', current_date + 15, false, 'Estética canina en Zona Río.'),
 ((select id from public.pets where name = 'Toby' and photo_url like 'images/%' and photo_url not like 'images/mascotas/%' limit 1), 'de000000-0000-4000-8000-000000000014', 'cita', 'Primera revisión veterinaria', current_date + -39, true, null),

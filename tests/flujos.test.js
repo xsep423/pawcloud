@@ -41,6 +41,9 @@ function makeFakeApi() {
     },
     async refreshProfile(id) { return db.users.find((u) => u.id === id); },
     async signOut() { current = null; },
+    async sendReset(email) { must(!/limite/.test(email), "email rate limit exceeded"); db.resets = (db.resets || []).concat(email); },
+    async updatePassword(password) { must(me(), "Auth session missing!"); me().password = password; },
+    loginAs(id) { current = id; },
     async listPets() { return db.pets.filter((p) => p.moderation === "aprobada" && p.status === "disponible"); },
     async myPets(uid) { return db.pets.filter((p) => p.owner_id === uid); },
     async createPet(p, file, uid) {
@@ -498,4 +501,65 @@ test("el admin ve las solicitudes y responde las de mascotas sin responsable", a
   assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "aceptada");
   assert.equal(api.db.pets.find((p) => p.id === "seed2").status, "adoptada");
   assert.equal(api.db.reqs.find((r) => r.id === "q2").status, "pendiente");
+});
+
+/* ====== Recuperación de contraseña ====== */
+// Abre el sitio como si se llegara desde el enlace del correo (con o sin sesión de recuperación)
+async function openFromEmail(hash, withSession) {
+  win.close();
+  api = makeFakeApi();
+  api.db.users.push({ id: "uR", email: "ana@correo.com", password: "vieja123", name: "Ana", role: "adoptante", verified: true });
+  if (withSession) api.loginAs("uR");
+  dom = new JSDOM(html, {
+    runScripts: "dangerously", url: "https://pawcloud.test/" + hash, pretendToBeVisual: true,
+    beforeParse(w) { w.__PAWCLOUD_API__ = api; w.confirm = () => true; },
+  });
+  win = dom.window; doc = win.document;
+  await win.__pawcloudReady;
+}
+
+test("desde el login se pide el enlace para recuperar la contraseña", async () => {
+  win.goAuth("login");
+  set("login-email", "ana@correo.com");
+  doc.querySelector("#login-form .link-btn").click();
+  assert.equal(doc.getElementById("reset-form").style.display, "flex");
+  assert.equal(doc.getElementById("login-form").style.display, "none");
+  assert.equal(doc.getElementById("reset-email").value, "ana@correo.com", "reutiliza el correo ya escrito");
+  await win.handleReset(ev);
+  assert.deepEqual(api.db.resets, ["ana@correo.com"]);
+  assert.match(doc.getElementById("reset-ok").textContent, /Si hay una cuenta/);
+  set("reset-email", "limite@correo.com");
+  await win.handleReset(ev);
+  assert.match(doc.getElementById("reset-error").textContent, /Demasiados intentos/);
+  assert.equal(doc.getElementById("reset-ok").textContent, "");
+});
+
+test("el enlace del correo abre el formulario de contraseña nueva y la guarda", async () => {
+  await openFromEmail("#access_token=abc&type=recovery", true);
+  assert.equal(activeScreen(), "auth");
+  assert.equal(doc.getElementById("newpass-form").style.display, "flex");
+  assert.equal(doc.getElementById("auth-tabs").style.display, "none");
+  assert.deepEqual(navLabels(), [], "todavía no entra a la cuenta");
+  set("newpass-1", "nueva123"); set("newpass-2", "otra1234");
+  await win.handleNewPassword(ev);
+  assert.match(doc.getElementById("newpass-error").textContent, /no coinciden/);
+  assert.equal(api.db.users[0].password, "vieja123");
+  set("newpass-2", "nueva123");
+  await win.handleNewPassword(ev);
+  assert.equal(api.db.users[0].password, "nueva123");
+  assert.equal(activeScreen(), "catalogo");
+  assert.match(doc.getElementById("toast").textContent, /Contraseña actualizada/);
+  await win.endSession();
+  win.goAuth("login");
+  assert.equal(doc.getElementById("auth-tabs").style.display, "", "las pestañas vuelven");
+  set("login-email", "ana@correo.com"); set("login-password", "nueva123");
+  await win.handleLogin(ev);
+  assert.equal(activeScreen(), "catalogo");
+});
+
+test("un enlace vencido ofrece pedir uno nuevo", async () => {
+  await openFromEmail("#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired", false);
+  assert.equal(activeScreen(), "auth");
+  assert.equal(doc.getElementById("reset-form").style.display, "flex");
+  assert.match(doc.getElementById("reset-error").textContent, /venció/);
 });
