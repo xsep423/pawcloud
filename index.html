@@ -94,6 +94,13 @@
   }
   .pet-card h3{margin:0 0 2px; font-size:17px; font-family:var(--font-head); font-weight:600;}
   .pet-meta{font-size:13px; color:var(--ink-soft); margin:0;}
+  /* Etiquetas de la tarjeta: sexo, tamaño y salud */
+  .pet-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px;}
+  .pchip{display:inline-flex; align-items:center; gap:3px; font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; line-height:1.5;}
+  .pchip.macho{background:#DCEBEE; color:#24525D;}
+  .pchip.hembra{background:#F6DED7; color:#8F3623;}
+  .pchip.size{background:#F4E3BE; color:#6B4E12;}
+  .pchip.salud{background:#DDE8DA; color:#294031;}
   .tag{
     position:absolute; top:12px; right:-30px; transform:rotate(35deg); background:var(--clay);
     color:#fff; font-size:11px; font-weight:700; padding:3px 34px; letter-spacing:.4px; z-index:2;
@@ -505,7 +512,12 @@
       <label>Tamaño
         <select id="pub-size"><option value="pequeno">Pequeño</option><option value="mediano" selected>Mediano</option><option value="grande">Grande</option></select>
       </label>
+      <label>Sexo
+        <select id="pub-sex" required><option value="">Selecciona…</option><option value="macho">Macho</option><option value="hembra">Hembra</option></select>
+      </label>
       <label>Edad aproximada <input id="pub-age" type="text" required placeholder="Ej. 2 años" maxlength="20"></label>
+      <label class="checkbox-row"><input type="checkbox" id="pub-vacunado"> Tiene sus vacunas al día</label>
+      <label class="checkbox-row"><input type="checkbox" id="pub-esterilizado"> Está esterilizado(a)</label>
       <label class="checkbox-row"><input type="checkbox" id="pub-depto"> Se adapta a vivir en departamento</label>
       <label>Descripción <textarea id="pub-desc" required maxlength="500" placeholder="Carácter, salud, dónde fue rescatada..."></textarea></label>
       <label>Foto <input id="pub-photo" type="file" accept="image/*"> <span class="photo-hint">Opcional. Máximo 3 MB.</span></label>
@@ -634,6 +646,17 @@
   const ROLE_LABEL = { adoptante:"Adoptante", refugio:"Refugio", rescatista:"Rescatista", admin:"Admin", invitado:"Invitado" };
   const SIZE_LABEL = { pequeno:"Pequeño", mediano:"Mediano", grande:"Grande" };
   const SPECIES_LABEL = { perro:"Perro", gato:"Gato" };
+  const SEX_LABEL = { macho:"♂ Macho", hembra:"♀ Hembra" };
+  // "Vacunado" o "Vacunada" según el sexo (si no se indicó, en masculino)
+  const healthWord = (p, base) => base + (p.sex === "hembra" ? "a" : "o");
+  function petChips(p){
+    const chips = [];
+    if(p.sex && SEX_LABEL[p.sex]) chips.push('<span class="pchip ' + p.sex + '">' + SEX_LABEL[p.sex] + "</span>");
+    if(SIZE_LABEL[p.size]) chips.push('<span class="pchip size">' + esc(SIZE_LABEL[p.size]) + "</span>");
+    if(p.vacunado) chips.push('<span class="pchip salud">✓ ' + healthWord(p, "Vacunad") + "</span>");
+    if(p.esterilizado) chips.push('<span class="pchip salud">✓ ' + healthWord(p, "Esterilizad") + "</span>");
+    return '<div class="pet-chips">' + chips.join("") + "</div>";
+  }
   const PLACEHOLDER = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#F1EBDB"/><text x="50" y="62" font-size="42" text-anchor="middle">🐾</text></svg>');
 
   function esc(s){
@@ -978,7 +1001,7 @@
     return '<article class="pet-card" tabindex="0" role="button" aria-label="Ver a ' + esc(p.name) + '" data-name="' + esc(String(p.name).toLowerCase()) + '" data-id="' + esc(p.id) + '" data-species="' + esc(p.species) + '" data-size="' + esc(p.size) + '" data-depto="' + (p.apto_depto ? 1 : 0) + '">' +
       (p.tag ? '<span class="tag">' + esc(p.tag) + "</span>" : "") +
       '<img class="avatar-img" alt="' + esc(p.name) + '" src="' + esc(photoOf(p)) + '" loading="lazy" decoding="async" width="360" height="360">' +
-      "<h3>" + esc(p.name) + '</h3><p class="pet-meta">' + esc(SPECIES_LABEL[p.species]) + " · " + esc(SIZE_LABEL[p.size]) + " · " + esc(p.age) + "</p></article>";
+      "<h3>" + esc(p.name) + '</h3><p class="pet-meta">' + esc(SPECIES_LABEL[p.species]) + " · " + esc(p.age) + "</p>" + petChips(p) + "</article>";
   }
 
   async function loadCatalog(){
@@ -1042,9 +1065,11 @@
     $("ficha-desc").textContent = p.description || "";
     $("ficha-facts").innerHTML =
       '<div class="fact"><b>Especie</b>' + esc(SPECIES_LABEL[p.species]) + "</div>" +
+      (p.sex && SEX_LABEL[p.sex] ? '<div class="fact"><b>Sexo</b>' + SEX_LABEL[p.sex].slice(2) + "</div>" : "") +
       '<div class="fact"><b>Edad</b>' + esc(p.age) + "</div>" +
       '<div class="fact"><b>Tamaño</b>' + esc(SIZE_LABEL[p.size]) + "</div>" +
-      '<div class="fact"><b>Departamento</b>' + (p.apto_depto ? "Se adapta" : "Mejor con espacio") + "</div>";
+      '<div class="fact"><b>Departamento</b>' + (p.apto_depto ? "Se adapta" : "Mejor con espacio") + "</div>" +
+      '<div class="fact"><b>Salud</b>' + esc([p.vacunado ? healthWord(p, "Vacunad") : "Vacunas pendientes", p.esterilizado ? healthWord(p, "Esterilizad") : "Sin esterilizar"].join(" · ")) + "</div>";
     showScreen("ficha");
   }
 
@@ -1222,6 +1247,7 @@
     try {
       const pet = await API.createPet({
         name: $("pub-name").value.trim(), species: $("pub-species").value, size: $("pub-size").value, age: $("pub-age").value.trim(),
+        sex: $("pub-sex").value || null, vacunado: $("pub-vacunado").checked, esterilizado: $("pub-esterilizado").checked,
         description: $("pub-desc").value.trim(), apto_depto: $("pub-depto").checked
       }, file || null, session.id);
       toast(pet.moderation === "aprobada" ? "Publicada: ya aparece en el catálogo." : "Enviada a revisión: un administrador la aprobará pronto.");

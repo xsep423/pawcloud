@@ -563,3 +563,31 @@ test("un enlace vencido ofrece pedir uno nuevo", async () => {
   assert.equal(doc.getElementById("reset-form").style.display, "flex");
   assert.match(doc.getElementById("reset-error").textContent, /venció/);
 });
+
+/* ====== Etiquetas de sexo y salud ====== */
+test("las tarjetas muestran etiquetas de sexo, tamaño y salud", async () => {
+  Object.assign(api.db.pets.find((p) => p.id === "seed3"), { sex: "hembra", vacunado: true, esterilizado: true });
+  Object.assign(api.db.pets.find((p) => p.id === "seed0"), { sex: "macho", vacunado: true, esterilizado: false });
+  await win.continueAsGuest();
+  const chips = (id) => [...doc.querySelectorAll('.pet-card[data-id="' + id + '"] .pchip')].map((c) => c.textContent);
+  assert.deepEqual(chips("seed3"), ["♀ Hembra", "Mediano", "✓ Vacunada", "✓ Esterilizada"]);
+  assert.deepEqual(chips("seed0"), ["♂ Macho", "Mediano", "✓ Vacunado"]);
+  assert.deepEqual(chips("seed1"), ["Pequeño"], "sin datos de sexo ni salud solo muestra el tamaño");
+  doc.querySelector('.pet-card[data-id="seed0"]').click();
+  const facts = doc.getElementById("ficha-facts").textContent;
+  assert.match(facts, /SexoMacho/);
+  assert.match(facts, /Vacunado · Sin esterilizar/);
+});
+
+test("al publicar se guardan el sexo y la salud de la mascota", async () => {
+  await register("refugio", "Rosa", "rosa@refugio.com", "Huellas AC");
+  api.db.users.find((u) => u.email === "rosa@refugio.com").verified = true;
+  await win.goTo("panel");
+  set("pub-name", "Perla"); set("pub-age", "1 año"); set("pub-desc", "Juguetona"); set("pub-sex", "hembra");
+  doc.getElementById("pub-vacunado").checked = true;
+  await win.handlePublicar(ev);
+  const pet = api.db.pets.find((p) => p.name === "Perla");
+  assert.equal(pet.sex, "hembra");
+  assert.equal(pet.vacunado, true);
+  assert.equal(pet.esterilizado, false);
+});
