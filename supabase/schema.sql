@@ -15,6 +15,7 @@ drop function if exists public.handle_new_user() cascade;
 drop function if exists public.is_admin() cascade;
 drop function if exists public.set_pet_moderation() cascade;
 drop function if exists public.guard_pet_update() cascade;
+drop function if exists public.stamp_request_status() cascade;
 drop type if exists public.user_role cascade;
 
 -- ---------- Tipos y tablas ----------
@@ -58,8 +59,12 @@ create table public.adoption_requests (
   housing_type text,
   other_pets text,
   message text,
-  status text not null default 'pendiente' check (status in ('pendiente','aceptada','rechazada')),
+  status text not null default 'pendiente' check (status in ('pendiente','en_revision','aceptada','periodo_prueba','completada','rechazada')),
   created_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  approved_at timestamptz,
+  trial_until date,
+  completed_at timestamptz,
   unique (pet_id, adopter_id)
 );
 
@@ -139,6 +144,21 @@ create trigger pets_guard
   before update on public.pets
   for each row execute function public.guard_pet_update();
 
+-- Fecha de cada paso de la solicitud (el periodo de prueba dura 15 días)
+create or replace function public.stamp_request_status() returns trigger
+language plpgsql as $$
+begin
+  if new.status is distinct from old.status then
+    if new.status = 'en_revision'    then new.reviewed_at  := coalesce(new.reviewed_at, now()); end if;
+    if new.status = 'aceptada'       then new.approved_at  := coalesce(new.approved_at, now()); end if;
+    if new.status = 'periodo_prueba' then new.trial_until  := coalesce(new.trial_until, current_date + 15); end if;
+    if new.status = 'completada'     then new.completed_at := coalesce(new.completed_at, now()); end if;
+  end if;
+  return new;
+end $$;
+create trigger stamp_request_status before update on public.adoption_requests
+  for each row execute function public.stamp_request_status();
+
 -- ---------- Seguridad por filas (RLS) ----------
 alter table public.profiles enable row level security;
 alter table public.pets enable row level security;
@@ -172,7 +192,7 @@ create policy "ver solicitudes" on public.adoption_requests for select
     or exists (select 1 from public.pets p where p.id = pet_id and p.owner_id = auth.uid())
   );
 create policy "adoptante cancela solicitud" on public.adoption_requests for delete
-  using (adopter_id = auth.uid() and status = 'pendiente');
+  using (adopter_id = auth.uid() and status in ('pendiente','en_revision'));
 create policy "dueno responde solicitud" on public.adoption_requests for update
   using (public.is_admin() or exists (select 1 from public.pets p where p.id = pet_id and p.owner_id = auth.uid()));
 
@@ -206,7 +226,8 @@ create policy "adoptante gestiona su seguimiento" on public.care_events for all
   with check (
     adopter_id = auth.uid() and exists (
       select 1 from public.adoption_requests r
-      where r.pet_id = care_events.pet_id and r.adopter_id = auth.uid() and r.status = 'aceptada')
+      where r.pet_id = care_events.pet_id and r.adopter_id = auth.uid()
+        and r.status in ('aceptada','periodo_prueba','completada'))
   );
 
 -- Quien dio la mascota en adopción y el admin pueden consultar el seguimiento

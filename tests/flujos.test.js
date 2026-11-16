@@ -56,7 +56,9 @@ function makeFakeApi() {
       return db.reqs.map((r) => ({ ...r, pets: db.pets.find((p) => p.id === r.pet_id) })).filter((r) => r.pets && r.pets.owner_id === uid);
     },
     async respondRequest(req, status) {
-      db.reqs.find((r) => r.id === req.id).status = status;
+      const row = db.reqs.find((r) => r.id === req.id);
+      row.status = status;
+      if (status === "periodo_prueba") row.trial_until = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10);
       if (status === "aceptada") db.pets.find((p) => p.id === req.pet_id).status = "adoptada";
     },
     async pendingRefuges() { return db.users.filter((u) => u.role === "refugio" && !u.verified); },
@@ -67,11 +69,11 @@ function makeFakeApi() {
     async withdrawPet(id) { db.pets = db.pets.filter((p) => p.id !== id); db.reqs = db.reqs.filter((r) => r.pet_id !== id); },
     async cancelRequest(id) { db.reqs = db.reqs.filter((r) => r.id !== id); },
     async myAdoptions(uid) {
-      return db.reqs.filter((r) => r.adopter_id === uid && r.status === "aceptada").map((r) => ({ pet_id: r.pet_id, pets: db.pets.find((p) => p.id === r.pet_id) }));
+      return db.reqs.filter((r) => r.adopter_id === uid && ["aceptada", "periodo_prueba", "completada"].includes(r.status)).map((r) => ({ pet_id: r.pet_id, pets: db.pets.find((p) => p.id === r.pet_id) }));
     },
     async listCare(uid) { return db.care.filter((c) => c.adopter_id === uid).sort((a, b) => a.event_date.localeCompare(b.event_date)); },
     async addCare(rows) {
-      rows.forEach((r) => must(r.adopter_id === current && db.reqs.some((q) => q.pet_id === r.pet_id && q.adopter_id === current && q.status === "aceptada"), "row-level security"));
+      rows.forEach((r) => must(r.adopter_id === current && db.reqs.some((q) => q.pet_id === r.pet_id && q.adopter_id === current && ["aceptada", "periodo_prueba", "completada"].includes(q.status)), "row-level security"));
       const out = rows.map((r) => ({ id: "c" + ++n, ...r })); db.care.push(...out); return out;
     },
     async setCareDone(id, done) { db.care.find((c) => c.id === id).done = done; },
@@ -309,7 +311,44 @@ test("el refugio acepta una solicitud y la mascota sale del catálogo", async ()
   await win.goTo("panel");
   doc.querySelector(".req-actions .accept").click();
   await new Promise((r) => setTimeout(r, 20));
+  assert.equal(api.db.reqs[0].status, "en_revision", "primero pasa a revisión");
+  assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "disponible");
+  doc.querySelector('#panel-requests [data-st="aceptada"]').click();
+  await new Promise((r) => setTimeout(r, 20));
   assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "adoptada");
+});
+
+test("la solicitud recorre todos los pasos y el adoptante ve la línea de tiempo", async () => {
+  await register("adoptante", "Ana Prueba", "ana@correo.com");
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  doc.getElementById("solicitud-ok").checked = true;
+  await win.handleSolicitud(ev);
+  const box = doc.getElementById("my-requests");
+  assert.equal(box.querySelectorAll(".req-timeline li").length, 5);
+  assert.equal(box.querySelector('.req-timeline li[aria-current="step"] b').textContent, "Enviada");
+  const req = api.db.reqs[0];
+  for (const [st, step] of [["en_revision", "En revisión"], ["aceptada", "Aprobada"], ["periodo_prueba", "Periodo de prueba"]]) {
+    await api.respondRequest(req, st);
+    await win.goTo("seguimiento");
+    assert.equal(box.querySelector('.req-timeline li[aria-current="step"] b').textContent, step);
+  }
+  assert.match(box.textContent, /Periodo de prueba hasta el/);
+  assert.ok(box.querySelector("[data-care]"), "en prueba ya puede llevar el seguimiento");
+  assert.equal(box.querySelector("[data-cancel]"), null, "ya no se puede cancelar");
+  await api.respondRequest(req, "completada");
+  await win.goTo("seguimiento");
+  assert.equal(box.querySelectorAll(".req-timeline li.done").length, 5);
+  assert.match(box.textContent, /Adopción completada/);
+});
+
+test("una solicitud rechazada muestra el paso en rojo", async () => {
+  await register("adoptante", "Ana Prueba", "ana@correo.com");
+  api.db.reqs.push({ id: "rz", pet_id: "seed3", adopter_id: api.db.users[0].id, status: "rechazada", created_at: new Date().toISOString() });
+  await win.goTo("seguimiento");
+  const box = doc.getElementById("my-requests");
+  assert.ok(box.querySelector(".req-timeline li.rejected"));
+  assert.match(box.textContent, /Esta vez no fue posible/);
 });
 
 test("un invitado ve la lista de lugares del mapa y la puede filtrar", async () => {
@@ -390,7 +429,7 @@ test("sin adopciones aceptadas, Mis mascotas explica qué esperar", async () => 
 test("una solicitud aceptada lleva al seguimiento de la mascota adoptada", async () => {
   await adoptedBy("Ana", "ana@correo.com");
   await win.goTo("seguimiento");
-  assert.match(doc.getElementById("my-requests").textContent, /Aceptada/);
+  assert.match(doc.getElementById("my-requests").textContent, /Aprobada/);
   doc.querySelector("[data-care]").click();
   await tick();
   assert.equal(activeScreen(), "mismascotas");
@@ -450,8 +489,11 @@ test("el admin ve las solicitudes y responde las de mascotas sin responsable", a
   const box = doc.getElementById("admin-requests");
   assert.match(box.textContent, /Mariana quiere adoptar a Toby/);
   assert.match(box.textContent, /La responde Huellas/);
-  assert.equal(box.querySelectorAll("[data-areq]").length, 2, "solo la de Toby tiene botones (aceptar y rechazar)");
-  box.querySelector('[data-areq="q1"][data-st="aceptada"]').click();
+  assert.equal(box.querySelectorAll("[data-areq]").length, 2, "solo la de Toby tiene botones (revisar y rechazar)");
+  box.querySelector('[data-areq="q1"][data-st="en_revision"]').click();
+  await tick();
+  assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "en_revision");
+  doc.getElementById("admin-requests").querySelector('[data-areq="q1"][data-st="aceptada"]').click();
   await tick();
   assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "aceptada");
   assert.equal(api.db.pets.find((p) => p.id === "seed2").status, "adoptada");

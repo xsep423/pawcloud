@@ -201,6 +201,28 @@
   .badge.pendiente{background:var(--mustard); color:var(--ink);}
   .badge.aprobada,.badge.aceptada{background:var(--forest); color:#fff;}
   .badge.rechazada{background:var(--clay); color:#fff;}
+  .badge.en_revision{background:#7A5C8C; color:#fff;}
+  .badge.periodo_prueba{background:#3E7C8C; color:#fff;}
+  .badge.completada{background:var(--forest-dk); color:#fff;}
+  /* Línea de tiempo de la solicitud de adopción */
+  .req-card{border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:6px;}
+  .req-card .req-item{border-bottom:none;}
+  .req-timeline{list-style:none; display:flex; margin:4px 0 8px; padding:0;}
+  .req-timeline li{flex:1; position:relative; text-align:center; font-size:11.5px; color:var(--ink-soft); padding-top:22px; min-width:0;}
+  .req-timeline li::before{content:""; position:absolute; top:6px; left:-50%; right:50%; height:3px; background:var(--line);}
+  .req-timeline li:first-child::before{display:none;}
+  .req-timeline li i{position:absolute; top:0; left:50%; transform:translateX(-50%); width:15px; height:15px; border-radius:50%; border:2px solid var(--ink-soft); background:var(--card); z-index:1;}
+  .req-timeline li b{display:block; font-weight:700;}
+  .req-timeline li small{display:block; font-size:10.5px;}
+  .req-timeline li.done::before,.req-timeline li.current::before{background:var(--forest);}
+  .req-timeline li.done i{background:var(--forest); border-color:var(--forest);}
+  .req-timeline li.current{color:var(--ink);}
+  .req-timeline li.current i{border-color:var(--forest); box-shadow:0 0 0 4px #3B5D4233;}
+  .req-timeline li.rejected{color:var(--clay);}
+  .req-timeline li.rejected::before{background:var(--clay);}
+  .req-timeline li.rejected i{background:var(--clay); border-color:var(--clay);}
+  .req-hint{font-size:13px; color:var(--ink-soft); margin:0;}
+  @media(max-width:560px){ .req-timeline li b{font-size:10.5px;} .req-timeline li small{display:none;} }
   .section-title{font-family:var(--font-head); font-weight:600; font-size:20px; margin:0 0 10px;}
   .req-item img{width:44px; height:44px; object-fit:cover; border-radius:var(--radius); flex:none;}
   .req-info{flex:1; min-width:0;}
@@ -475,7 +497,7 @@
   <section class="screen" id="seguimiento">
     <div class="hero"><div><h2>Mis solicitudes</h2><p>Aquí ves el estado de cada adopción que pediste.</p></div></div>
     <div id="my-requests"></div>
-    <p class="care-tip" style="margin-top:24px;">Cuando aceptan una solicitud, la mascota aparece en <button type="button" class="link-btn" onclick="goTo('mismascotas')">Mis mascotas</button> para llevar su seguimiento de vacunas y citas.</p>
+    <p class="care-tip" style="margin-top:24px;">Cuando aprueban una solicitud, la mascota aparece en <button type="button" class="link-btn" onclick="goTo('mismascotas')">Mis mascotas</button> para llevar su seguimiento de vacunas y citas.</p>
   </section>
 
   <!-- MIS MASCOTAS (seguimiento posterior a la adopción) -->
@@ -699,7 +721,7 @@
         if(!d.length) fail({ message:"row-level security" });
       },
       async myAdoptions(uid){
-        return ok(await sb.from("adoption_requests").select("pet_id, pets(id, name, photo_url, owner_name, species)").eq("adopter_id", uid).eq("status", "aceptada"));
+        return ok(await sb.from("adoption_requests").select("pet_id, pets(id, name, photo_url, owner_name, species)").eq("adopter_id", uid).in("status", ADOPTED));
       },
       async listCare(uid){ return ok(await sb.from("care_events").select("*").eq("adopter_id", uid).order("event_date")); },
       async addCare(rows){ return ok(await sb.from("care_events").insert(rows).select()); },
@@ -981,6 +1003,51 @@
     } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
+  /* ====== ESTADOS DE LA SOLICITUD DE ADOPCIÓN ======
+     pendiente → en_revision → aceptada → periodo_prueba (15 días) → completada  (o rechazada) */
+  const ADOPTED = ["aceptada", "periodo_prueba", "completada"];
+  const isOpen = s => s === "pendiente" || s === "en_revision";
+  const REQ_LABEL = { pendiente:"Pendiente", en_revision:"En revisión", aceptada:"Aprobada", periodo_prueba:"Periodo de prueba", completada:"Completada", rechazada:"Rechazada" };
+  const REQ_STEPS = [
+    ["pendiente", "Enviada", "created_at"], ["en_revision", "En revisión", "reviewed_at"], ["aceptada", "Aprobada", "approved_at"],
+    ["periodo_prueba", "Periodo de prueba", "trial_until"], ["completada", "Completada", "completed_at"]
+  ];
+  const REQ_NEXT = { pendiente:["en_revision", "Pasar a revisión"], en_revision:["aceptada", "Aprobar"], aceptada:["periodo_prueba", "Iniciar prueba (15 días)"], periodo_prueba:["completada", "Completar adopción"] };
+  const shortDate = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("es-MX", { day:"numeric", month:"short" }) : "";
+  const reqBadge = r => '<span class="badge ' + esc(r.status) + '">' + esc(REQ_LABEL[r.status] || cap(r.status)) + "</span>";
+  function reqTimeline(r){
+    if(r.status === "rechazada"){
+      return '<ol class="req-timeline"><li class="done"><i></i><b>Enviada</b><small>' + esc(shortDate(r.created_at)) + "</small></li>" +
+        '<li class="rejected"><i></i><b>Rechazada</b></li></ol>';
+    }
+    const idx = Math.max(0, REQ_STEPS.findIndex(s => s[0] === r.status));
+    return '<ol class="req-timeline" aria-label="Estado: ' + esc(REQ_LABEL[r.status] || r.status) + '">' + REQ_STEPS.map(([key, label, field], i) => {
+      const cls = i < idx || (i === idx && key === "completada") ? "done" : i === idx ? "current" : "";
+      let date = i <= idx && r[field] ? shortDate(r[field]) : "";
+      if(key === "periodo_prueba" && date) date = "hasta " + date;
+      return '<li class="' + cls + '"' + (i === idx ? ' aria-current="step"' : "") + "><i></i><b>" + esc(label) + "</b><small>" + esc(date) + "</small></li>";
+    }).join("") + "</ol>";
+  }
+  function reqHint(r){
+    const name = r.pets ? r.pets.name : "tu mascota";
+    return {
+      pendiente: "El refugio todavía no abre tu solicitud.",
+      en_revision: "El refugio está revisando tu solicitud y puede contactarte para conocerte.",
+      aceptada: "¡Aprobada! El refugio te contactará para entregarte a " + name + ".",
+      periodo_prueba: "Periodo de prueba" + (r.trial_until ? " hasta el " + shortDate(r.trial_until) : "") + ": registra sus vacunas y citas en Mis mascotas.",
+      completada: "¡Adopción completada! Gracias por darle un hogar a " + name + ".",
+      rechazada: "Esta vez no fue posible. Hay más mascotas esperando en el catálogo."
+    }[r.status] || "";
+  }
+  // Botones del refugio/admin según el estado: avanzar al siguiente paso o rechazar
+  function reqActions(r, attr){
+    const nx = REQ_NEXT[r.status];
+    if(!nx) return reqBadge(r);
+    return reqBadge(r) + '<div class="req-actions"><button class="accept" ' + attr + '="' + esc(r.id) + '" data-st="' + nx[0] + '">' + esc(nx[1]) + "</button>" +
+      (isOpen(r.status) ? '<button class="decline" ' + attr + '="' + esc(r.id) + '" data-st="rechazada">Rechazar</button>' : "") + "</div>";
+  }
+  const reqToast = st => "Solicitud: " + (REQ_LABEL[st] || st).toLowerCase() + ".";
+
   /* ====== ADOPTANTE: MIS SOLICITUDES ====== */
   async function loadMyRequests(){
     const box = $("my-requests");
@@ -988,10 +1055,11 @@
     try {
       const rows = await API.myRequests(session.id);
       box.innerHTML = rows.length ? rows.map(r =>
-        '<div class="req-item"><img alt="" src="' + esc(photoOf(r.pets)) + '"><div class="req-info"><b>' + esc(r.pets ? r.pets.name : "Mascota") + "</b>" +
-        "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + '</small></div><span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>" +
-        (r.status === "pendiente" ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") +
-        (r.status === "aceptada" ? '<div class="req-actions"><button class="accept" data-care="1">Ver seguimiento</button></div>' : "") + "</div>"
+        '<div class="req-card"><div class="req-item"><img alt="" src="' + esc(photoOf(r.pets)) + '"><div class="req-info"><b>' + esc(r.pets ? r.pets.name : "Mascota") + "</b>" +
+        "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + "</small></div>" + reqBadge(r) +
+        (isOpen(r.status) ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") +
+        (ADOPTED.includes(r.status) ? '<div class="req-actions"><button class="accept" data-care="1">Ver seguimiento</button></div>' : "") + "</div>" +
+        reqTimeline(r) + '<p class="req-hint">' + esc(reqHint(r)) + "</p></div>"
       ).join("") : '<p class="list-empty">Todavía no has enviado solicitudes. Explora el catálogo para empezar.</p>';
       box.querySelectorAll("[data-care]").forEach(b => b.addEventListener("click", () => goTo("mismascotas")));
       box.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", async () => {
@@ -1025,7 +1093,7 @@
     pets.innerHTML = reqs.innerHTML = '<p class="loading-msg">Cargando…</p>';
     try {
       const [myPets, received] = await Promise.all([API.myPets(session.id), API.receivedRequests(session.id)]);
-      const pending = received.filter(r => r.status === "pendiente");
+      const pending = received.filter(r => isOpen(r.status));
       const adoptedIds = myPets.filter(p => p.status === "adoptada").map(p => p.id);
       let care = [];
       try { care = await API.careForPets(adoptedIds); } catch(e) { care = []; }
@@ -1044,10 +1112,9 @@
       ).join("") : '<p class="list-empty">Aún no has publicado mascotas.</p>';
       reqs.innerHTML = received.length ? received.map(r =>
         '<div class="req-item"><div class="req-info"><b>' + esc(r.adopter_name) + "</b> quiere adoptar a <b>" + esc(r.pets ? r.pets.name : "") + "</b>" +
-        "<small>" + esc(r.housing_type || "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") + "</small></div>" +
-        (r.status === "pendiente"
-          ? '<div class="req-actions"><button class="accept" data-id="' + esc(r.id) + '" data-st="aceptada">Aceptar</button><button class="decline" data-id="' + esc(r.id) + '" data-st="rechazada">Rechazar</button></div>'
-          : '<span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>") + "</div>"
+        "<small>" + esc(r.housing_type || "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") +
+        (r.status === "periodo_prueba" && r.trial_until ? " · Prueba hasta el " + esc(shortDate(r.trial_until)) : "") + "</small></div>" +
+        reqActions(r, "data-id") + "</div>"
       ).join("") : '<p class="list-empty">Todavía no recibes solicitudes.</p>';
       pets.querySelectorAll("[data-withdraw]").forEach(b => b.addEventListener("click", async () => {
         if(!window.confirm("¿Retirar esta publicación? También se borrarán sus solicitudes.")) return;
@@ -1056,7 +1123,7 @@
       reqs.querySelectorAll(".req-actions button").forEach(b => b.addEventListener("click", async () => {
         const req = received.find(r => r.id === b.dataset.id);
         if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
-        try { await API.respondRequest(req, b.dataset.st); toast("Solicitud " + b.dataset.st + "."); await loadPanel(); }
+        try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadPanel(); }
         catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ pets.innerHTML = reqs.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
@@ -1111,20 +1178,18 @@
       const mine = r => !r.pets || !r.pets.owner_id || r.pets.owner_id === session.id;
       $("admin-req-stats").innerHTML =
         '<div class="stat"><b>' + rows.length + "</b><span>Solicitudes en total</span></div>" +
-        '<div class="stat"><b>' + rows.filter(r => r.status === "pendiente").length + "</b><span>Pendientes</span></div>" +
-        '<div class="stat"><b>' + rows.filter(r => r.status === "pendiente" && mine(r)).length + "</b><span>Pendientes que te tocan</span></div>";
+        '<div class="stat"><b>' + rows.filter(r => isOpen(r.status)).length + "</b><span>Pendientes</span></div>" +
+        '<div class="stat"><b>' + rows.filter(r => isOpen(r.status) && mine(r)).length + "</b><span>Pendientes que te tocan</span></div>";
       box.innerHTML = rows.length ? rows.map(r => {
         const pet = r.pets || {}, who = pet.owner_id ? (pet.owner_id === session.id ? "Publicada por ti" : "La responde " + (pet.owner_name || "quien la publicó")) : "Sin responsable: la respondes tú";
         return '<div class="req-item"><img alt="" src="' + esc(photoOf(pet)) + '"><div class="req-info"><b>' + esc(r.adopter_name || "Adoptante") + "</b> quiere adoptar a <b>" + esc(pet.name || "") + "</b>" +
           "<small>" + esc(who) + " · " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + (r.housing_type ? " · " + esc(r.housing_type) : "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") + "</small></div>" +
-          (r.status === "pendiente" && mine(r)
-            ? '<div class="req-actions"><button class="accept" data-areq="' + esc(r.id) + '" data-st="aceptada">Aceptar</button><button class="decline" data-areq="' + esc(r.id) + '" data-st="rechazada">Rechazar</button></div>'
-            : '<span class="badge ' + esc(r.status) + '">' + esc(cap(r.status)) + "</span>") + "</div>";
+          (mine(r) ? reqActions(r, "data-areq") : reqBadge(r)) + "</div>";
       }).join("") : '<p class="list-empty">Todavía no hay solicitudes de adopción.</p>';
       box.querySelectorAll("[data-areq]").forEach(b => b.addEventListener("click", async () => {
         const req = rows.find(r => r.id === b.dataset.areq);
         if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
-        try { await API.respondRequest(req, b.dataset.st); toast("Solicitud " + b.dataset.st + "."); await loadAdminRequests(); } catch(err){ toast(friendlyError(err)); }
+        try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadAdminRequests(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
   }
