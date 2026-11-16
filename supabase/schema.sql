@@ -10,6 +10,7 @@ drop table if exists public.care_events cascade;
 drop table if exists public.adoption_requests cascade;
 drop table if exists public.pets cascade;
 drop table if exists public.places cascade;
+drop table if exists public.campaigns cascade;
 drop table if exists public.profiles cascade;
 drop function if exists public.handle_new_user() cascade;
 drop function if exists public.is_admin() cascade;
@@ -269,3 +270,27 @@ insert into public.pets (owner_name, name, species, size, age, description, phot
 -- 2) Corre esta línea cambiando el correo, en una consulta nueva:
 --
 -- update public.profiles set role = 'admin', verified = true where email = 'TU_CORREO@gmail.com';
+
+-- ---------- Campañas (esterilización, vacunación, adopción) ----------
+create table if not exists public.campaigns (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(title) between 3 and 100),
+  kind text not null check (kind in ('esterilizacion','vacunacion','adopcion')),
+  organizer text,
+  address text,
+  lat double precision not null,
+  lng double precision not null,
+  starts_on date not null,
+  ends_on date not null,
+  cost text,
+  details text check (details is null or char_length(details) <= 400),
+  created_at timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+create index if not exists campaigns_ends_on on public.campaigns (ends_on);
+
+alter table public.campaigns enable row level security;
+drop policy if exists "campanas publicas" on public.campaigns;
+create policy "campanas publicas" on public.campaigns for select using (true);
+drop policy if exists "admin gestiona campanas" on public.campaigns;
+create policy "admin gestiona campanas" on public.campaigns for all using (public.is_admin()) with check (public.is_admin());

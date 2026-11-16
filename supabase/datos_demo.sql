@@ -294,3 +294,19 @@ from (values
   ('de000000-0000-4000-9000-000000000029', 'hembra', false, false)
 ) as d(id, sex, vacunado, esterilizado)
 where p.id = d.id::uuid;
+
+-- Campañas de EJEMPLO para la demostración (fechas relativas a hoy, para que siempre se vean vigentes).
+-- Organiza el refugio ficticio de los datos demo; las ubicaciones son aproximadas.
+insert into public.campaigns (title, kind, organizer, address, lat, lng, starts_on, ends_on, cost, details)
+select v.* from (values
+  ('Vacunación antirrábica gratuita (ejemplo)', 'vacunacion', 'Refugio Huellas de Tijuana', 'Parque Teniente Guerrero, Zona Centro',
+   32.5325, -117.0423, current_date - 1, current_date + 5, 'Gratis',
+   'Campaña de ejemplo. Perros y gatos desde los 3 meses. De 9:00 a 14:00; lleva a tu mascota con correa o en transportadora.'),
+  ('Jornada de esterilización a bajo costo (ejemplo)', 'esterilizacion', 'Refugio Huellas de Tijuana', 'Explanada del CECUT, Zona Río',
+   32.5297, -117.0221, current_date + 3, current_date + 4, '$250 perro · $200 gato',
+   'Campaña de ejemplo. Cupo limitado: llega temprano. La mascota debe venir en ayuno de 8 horas.'),
+  ('Feria de adopción de fin de mes (ejemplo)', 'adopcion', 'Refugio Huellas de Tijuana', 'Malecón de Playas de Tijuana',
+   32.5280, -117.1228, current_date + 10, current_date + 10, 'Entrada libre',
+   'Campaña de ejemplo. Conoce a perros y gatos listos para adopción; los que adopten ese día se llevan un kit de bienvenida.')
+) as v(title, kind, organizer, address, lat, lng, starts_on, ends_on, cost, details)
+where not exists (select 1 from public.campaigns c where c.title = v.title);

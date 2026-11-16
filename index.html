@@ -244,6 +244,18 @@
   .map-fallback{display:none; color:var(--ink-soft); font-size:13px; margin:-8px 0 14px;}
   .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;}
   .legend i{display:inline-block; width:11px; height:11px; border-radius:50%; border:2px solid var(--ink); margin-right:5px; vertical-align:-1px;}
+  .legend i.diamond{border-radius:2px; transform:rotate(45deg);}
+  /* Campañas de esterilización, vacunación y adopción */
+  .camp-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; margin-bottom:26px;}
+  .camp-card{background:var(--card); border:1.5px solid var(--ink); border-radius:var(--radius); padding:14px 16px; display:flex; flex-direction:column; gap:6px;}
+  .camp-card h4{margin:0; font-family:var(--font-head); font-size:17px; font-weight:600; line-height:1.25;}
+  .camp-top{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;}
+  .camp-when{font-size:13px; font-weight:700;}
+  .camp-line{font-size:12.5px; color:var(--ink-soft); margin:0;}
+  .camp-card .btn{margin-top:auto; align-self:flex-start; padding:7px 12px; font-size:12.5px;}
+  .camp-status{font-size:11px; font-weight:700; color:var(--forest);}
+  .camp-status.soon{color:var(--clay);}
+  .camp-pin{width:16px; height:16px; background:#7A5C8C; border:2px solid #22271F; transform:rotate(45deg); border-radius:2px;}
   .place-item{cursor:pointer;}
   .place-item:hover{background:var(--paper-2);}
   .place-form{max-width:none; margin-top:10px;}
@@ -561,17 +573,21 @@
 
   <!-- MAPA -->
   <section class="screen" id="mapa">
-    <div class="hero"><div><h2>Ayuda cerca de ti</h2><p>Veterinarias, refugios y centros de ayuda para animales en Tijuana.</p></div></div>
+    <div class="hero"><div><h2>Ayuda cerca de ti</h2><p>Campañas, veterinarias, refugios y centros de ayuda para animales en Tijuana.</p></div></div>
+    <h3 class="section-title">Próximas campañas</h3>
+    <div class="camp-grid" id="campaigns-list"></div>
     <div class="chips" id="place-chips">
       <button type="button" class="chip on" data-kind="todos" aria-pressed="true">Todos</button>
       <button type="button" class="chip" data-kind="veterinaria" aria-pressed="false">Veterinarias</button>
       <button type="button" class="chip" data-kind="refugio" aria-pressed="false">Refugios</button>
       <button type="button" class="chip" data-kind="centro_ayuda" aria-pressed="false">Centros de ayuda</button>
+      <button type="button" class="chip" data-kind="campana" aria-pressed="false">Campañas</button>
     </div>
     <div class="legend" aria-hidden="true">
       <span><i style="background:#3B5D42"></i>Veterinaria</span>
       <span><i style="background:#B5472F"></i>Refugio</span>
       <span><i style="background:#D9A441"></i>Centro de ayuda</span>
+      <span><i class="diamond" style="background:#7A5C8C"></i>Campaña</span>
     </div>
     <div class="map-box" id="map"></div>
     <p class="map-fallback" id="map-fallback">No se pudo cargar el mapa. Aquí abajo sigue la lista de lugares.</p>
@@ -613,6 +629,31 @@
         <button class="btn btn-primary" type="submit">Agregar al mapa</button>
       </form>
       <div id="admin-places"></div>
+    </div>
+    <h3 class="section-title" style="margin-top:36px;">Campañas</h3>
+    <div class="panel-grid">
+      <form class="card place-form" id="campaign-form" onsubmit="handleCampaign(event)">
+        <label>Título <input id="cp-title" type="text" required minlength="3" maxlength="100" placeholder="Ej. Jornada de esterilización a bajo costo"></label>
+        <label>Tipo
+          <select id="cp-kind"><option value="esterilizacion">Esterilización</option><option value="vacunacion">Vacunación</option><option value="adopcion">Feria de adopción</option></select>
+        </label>
+        <label>Organiza <input id="cp-organizer" type="text" maxlength="80" placeholder="Ej. Refugio Huellas de Tijuana"></label>
+        <div class="row2">
+          <label>Empieza <input id="cp-start" type="date" required></label>
+          <label>Termina <input id="cp-end" type="date" required></label>
+        </div>
+        <label>Lugar <input id="cp-address" type="text" maxlength="160" placeholder="Calle, número y colonia"></label>
+        <button type="button" class="btn btn-ghost" onclick="geocodeCampaign()">Buscar coordenadas por la dirección</button>
+        <div class="row2">
+          <label>Latitud <input id="cp-lat" type="number" step="any" required></label>
+          <label>Longitud <input id="cp-lng" type="number" step="any" required></label>
+        </div>
+        <label>Costo <input id="cp-cost" type="text" maxlength="40" placeholder="Ej. Gratis o $150"></label>
+        <label>Detalles <textarea id="cp-details" maxlength="400" placeholder="Horario, requisitos, qué llevar..."></textarea></label>
+        <p class="auth-error" id="campaign-error" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Publicar campaña</button>
+      </form>
+      <div id="admin-campaigns"></div>
     </div>
   </section>
 
@@ -787,6 +828,10 @@
       async listPlaces(){ return ok(await sb.from("places").select("*").order("name")); },
       async addPlace(p){ return ok(await sb.from("places").insert(p).select().single()); },
       async deletePlace(id){ ok(await sb.from("places").delete().eq("id", id)); },
+      async listCampaigns(){ return ok(await sb.from("campaigns").select("*").gte("ends_on", todayISO()).order("starts_on")); },
+      async allCampaigns(){ return ok(await sb.from("campaigns").select("*").order("starts_on", { ascending:false })); },
+      async addCampaign(c){ return ok(await sb.from("campaigns").insert(c).select().single()); },
+      async deleteCampaign(id){ ok(await sb.from("campaigns").delete().eq("id", id)); },
       async geocode(q){
         const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=mx&viewbox=-117.3,32.65,-116.6,32.3&q=" + encodeURIComponent(q + ", Tijuana");
         const j = await (await fetch(url)).json();
@@ -1261,6 +1306,7 @@
     const refs = $("admin-refuges"), pets = $("admin-pets");
     refs.innerHTML = pets.innerHTML = '<p class="loading-msg">Cargando…</p>';
     loadAdminPlaces();
+    loadAdminCampaigns();
     loadAdminRequests();
     try {
       const [refuges, pending] = await Promise.all([API.pendingRefuges(), API.pendingPets()]);
@@ -1406,6 +1452,32 @@
   const KIND_LABEL = { veterinaria:"Veterinaria", refugio:"Refugio", centro_ayuda:"Centro de ayuda" };
   const KIND_COLOR = { veterinaria:"#3B5D42", refugio:"#B5472F", centro_ayuda:"#D9A441" };
   let places = [], placeFilter = "todos", map = null, markerLayer = null, markers = {}, leafletPromise = null;
+  let campaigns = [];
+  const CAMP_LABEL = { esterilizacion:"Esterilización", vacunacion:"Vacunación", adopcion:"Feria de adopción" };
+  const CAMP_COLOR = { esterilizacion:"#3B5D42", vacunacion:"#3E7C8C", adopcion:"#B5472F" };
+  // Fecha de hoy en hora local, como 'AAAA-MM-DD'
+  function todayISO(){ const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function campDates(c){ return c.starts_on === c.ends_on ? shortDate(c.starts_on) : shortDate(c.starts_on) + " – " + shortDate(c.ends_on); }
+  function campStatus(c){
+    const today = todayISO();
+    if(c.starts_on <= today) return '<span class="camp-status">● En curso</span>';
+    const days = Math.round((new Date(c.starts_on + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
+    return '<span class="camp-status soon">' + (days === 1 ? "Empieza mañana" : "Empieza en " + days + " días") + "</span>";
+  }
+  function renderCampaigns(){
+    const box = $("campaigns-list");
+    box.innerHTML = campaigns.length ? campaigns.map(c =>
+      '<article class="camp-card"><div class="camp-top"><span class="badge" style="background:' + esc(CAMP_COLOR[c.kind]) + ';color:#fff;">' + esc(CAMP_LABEL[c.kind]) + "</span>" + campStatus(c) + "</div>" +
+      "<h4>" + esc(c.title) + '</h4><p class="camp-when">📅 ' + esc(campDates(c)) + "</p>" +
+      (c.address ? '<p class="camp-line">📍 ' + esc(c.address) + "</p>" : "") +
+      (c.cost ? '<p class="camp-line">💲 ' + esc(c.cost) + "</p>" : "") +
+      (c.organizer ? '<p class="camp-line">Organiza: ' + esc(c.organizer) + "</p>" : "") +
+      (c.details ? '<p class="camp-line">' + esc(c.details) + "</p>" : "") +
+      '<button type="button" class="btn btn-ghost" data-camp="' + esc(c.id) + '">Ver en el mapa</button></article>'
+    ).join("") : '<p class="list-empty">No hay campañas programadas por ahora. Vuelve pronto.</p>';
+    box.querySelectorAll("[data-camp]").forEach(b => b.addEventListener("click", () => focusPlace("camp-" + b.dataset.camp)));
+  }
+  const showCampaignsOnMap = () => placeFilter === "todos" || placeFilter === "campana";
 
   function ensureLeaflet(){
     if(window.L) return Promise.resolve(true);
@@ -1421,7 +1493,7 @@
     return leafletPromise;
   }
 
-  function visiblePlaces(){ return places.filter(p => placeFilter === "todos" || p.kind === placeFilter); }
+  function visiblePlaces(){ return placeFilter === "campana" ? [] : places.filter(p => placeFilter === "todos" || p.kind === placeFilter); }
 
   function popupHtml(p){
     const tel = (p.phone || "").replace(/[^0-9+]/g, "");
@@ -1432,6 +1504,13 @@
 
   function renderPlaces(){
     const list = $("places-list"), vis = visiblePlaces();
+    if(placeFilter === "campana"){
+      list.innerHTML = campaigns.length ? campaigns.map(c =>
+        '<div class="req-item place-item" tabindex="0" role="button" aria-label="Ver ' + esc(c.title) + ' en el mapa" data-id="camp-' + esc(c.id) + '"><div class="req-info"><b>' + esc(c.title) + "</b><small>" +
+        esc(campDates(c)) + (c.address ? " · " + esc(c.address) : "") + "</small></div>" +
+        '<span class="badge" style="background:#7A5C8C;color:#fff;">' + esc(CAMP_LABEL[c.kind]) + "</span></div>"
+      ).join("") : '<p class="list-empty">No hay campañas programadas por ahora.</p>';
+    } else
     list.innerHTML = vis.length ? vis.map(p =>
       '<div class="req-item place-item" tabindex="0" role="button" aria-label="Ver ' + esc(p.name) + ' en el mapa" data-id="' + esc(p.id) + '"><div class="req-info"><b>' + esc(p.name) + "</b><small>" +
       esc(KIND_LABEL[p.kind]) + (p.address ? " · " + esc(p.address) : "") + (p.phone ? " · " + esc(p.phone) : "") + "</small></div>" +
@@ -1451,7 +1530,13 @@
       const m = L.circleMarker([p.lat, p.lng], { radius:10, color:"#22271F", weight:2, fillColor:KIND_COLOR[p.kind], fillOpacity:.95 }).bindPopup(popupHtml(p));
       m.addTo(markerLayer); markers[p.id] = m;
     });
-    if(vis.length) map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(.25), { maxZoom:15 });
+    if(showCampaignsOnMap()) campaigns.forEach(c => {
+      const icon = L.divIcon({ className:"", html:'<div class="camp-pin"></div>', iconSize:[16, 16], iconAnchor:[8, 8], popupAnchor:[0, -8] });
+      const m = L.marker([c.lat, c.lng], { icon, title:c.title }).bindPopup(
+        "<b>" + esc(c.title) + "</b><br>" + esc(CAMP_LABEL[c.kind]) + " · " + esc(campDates(c)) + (c.address ? "<br>" + esc(c.address) : "") + (c.cost ? "<br>" + esc(c.cost) : ""));
+      m.addTo(markerLayer); markers["camp-" + c.id] = m;
+    });
+    if(Object.keys(markers).length) map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(.25), { maxZoom:15 });
   }
 
   function initMap(){
@@ -1465,7 +1550,8 @@
   }
 
   function focusPlace(id){
-    const p = places.find(x => x.id === id);
+    const c = String(id).indexOf("camp-") === 0 ? campaigns.find(x => "camp-" + x.id === id) : null;
+    const p = c || places.find(x => x.id === id);
     if(!p || !map || !markers[id]) return;
     $("map").scrollIntoView({ behavior:"smooth", block:"center" });
     map.setView([p.lat, p.lng], 16);
@@ -1474,7 +1560,13 @@
 
   async function loadMap(){
     $("places-list").innerHTML = '<p class="loading-msg">Cargando lugares…</p>';
-    try { places = API ? await API.listPlaces() : []; } catch(err){ places = []; toast(friendlyError(err)); }
+    $("campaigns-list").innerHTML = '<p class="loading-msg">Cargando campañas…</p>';
+    const [pl, cp] = await Promise.all([
+      API ? API.listPlaces().catch(err => { toast(friendlyError(err)); return []; }) : [],
+      API && API.listCampaigns ? API.listCampaigns().catch(() => []) : []
+    ]);
+    places = pl; campaigns = cp;
+    renderCampaigns();
     renderPlaces();
     ensureLeaflet().then(ok => {
       if(ok) initMap(); else $("map-fallback").style.display = "block";
@@ -1505,6 +1597,56 @@
         try { await API.deletePlace(b.dataset.del); toast("Lugar eliminado."); await loadAdminPlaces(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  /* ====== ADMIN: CAMPAÑAS ====== */
+  async function loadAdminCampaigns(){
+    const box = $("admin-campaigns");
+    try {
+      const rows = await API.allCampaigns(), today = todayISO();
+      box.innerHTML = rows.length ? rows.map(c =>
+        '<div class="req-item"><div class="req-info"><b>' + esc(c.title) + "</b><small>" + esc(CAMP_LABEL[c.kind]) + " · " + esc(campDates(c)) +
+        (c.ends_on < today ? " · Terminada" : "") + "</small></div>" +
+        '<div class="req-actions"><button class="decline" data-delcamp="' + esc(c.id) + '">Eliminar</button></div></div>'
+      ).join("") : '<p class="list-empty">Aún no hay campañas.</p>';
+      box.querySelectorAll("[data-delcamp]").forEach(b => b.addEventListener("click", async () => {
+        if(!window.confirm("¿Eliminar esta campaña?")) return;
+        try { await API.deleteCampaign(b.dataset.delcamp); toast("Campaña eliminada."); await loadAdminCampaigns(); } catch(err){ toast(friendlyError(err)); }
+      }));
+    } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }
+  }
+
+  async function geocodeCampaign(){
+    const errEl = $("campaign-error"), q = $("cp-address").value.trim();
+    errEl.textContent = "";
+    if(!q){ errEl.textContent = "Escribe la dirección del lugar."; return; }
+    try {
+      const r = await API.geocode(q);
+      if(!r){ errEl.textContent = "No encontramos esa dirección. Agrega colonia o escribe las coordenadas a mano."; return; }
+      $("cp-lat").value = r.lat.toFixed(6); $("cp-lng").value = r.lng.toFixed(6);
+      toast("Coordenadas encontradas.");
+    } catch(err){ errEl.textContent = "No se pudo buscar la dirección. Escribe las coordenadas a mano."; }
+  }
+
+  async function handleCampaign(e){ e.preventDefault(); await withBusy("campaign-form", "Publicando…", handleCampaignCore); }
+  async function handleCampaignCore(){
+    const errEl = $("campaign-error");
+    errEl.textContent = "";
+    const lat = Number($("cp-lat").value), lng = Number($("cp-lng").value), start = $("cp-start").value, end = $("cp-end").value;
+    if(!start || !end){ errEl.textContent = "Indica cuándo empieza y cuándo termina."; return; }
+    if(end < start){ errEl.textContent = "La fecha de término no puede ser antes del inicio."; return; }
+    if(end < todayISO()){ errEl.textContent = "Esa campaña ya terminó. Revisa las fechas."; return; }
+    if(!(lat >= 14 && lat <= 33 && lng >= -119 && lng <= -86)){ errEl.textContent = "Las coordenadas no parecen estar en México. Revisa latitud y longitud."; return; }
+    try {
+      await API.addCampaign({
+        title:$("cp-title").value.trim(), kind:$("cp-kind").value, organizer:$("cp-organizer").value.trim() || null,
+        address:$("cp-address").value.trim() || null, lat, lng, starts_on:start, ends_on:end,
+        cost:$("cp-cost").value.trim() || null, details:$("cp-details").value.trim() || null
+      });
+      toast("Campaña publicada en el mapa.");
+      $("campaign-form").reset();
+      await loadAdminCampaigns();
+    } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
   async function geocodePlace(){

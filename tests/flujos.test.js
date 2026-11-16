@@ -19,8 +19,11 @@ const SEED = [
   created_at: "2026-10-01T00:00:00Z",
 }));
 
+// Fecha local 'AAAA-MM-DD' desplazada n días desde hoy
+const isoDay = (n) => { const d = new Date(Date.now() + n * 864e5); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+
 function makeFakeApi() {
-  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], care: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
+  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], care: [], campaigns: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
   let n = 0, current = null;
   const me = () => db.users.find((u) => u.id === current);
   const must = (c, m) => { if (!c) throw new Error(m); };
@@ -85,6 +88,10 @@ function makeFakeApi() {
     async listPlaces() { return db.places.slice(); },
     async addPlace(p) { const row = { id: "pl" + ++n, ...p }; db.places.push(row); return row; },
     async deletePlace(id) { db.places = db.places.filter((p) => p.id !== id); },
+    async listCampaigns() { const today = isoDay(0); return db.campaigns.filter((c) => c.ends_on >= today).sort((a, b) => a.starts_on.localeCompare(b.starts_on)); },
+    async allCampaigns() { return db.campaigns.slice(); },
+    async addCampaign(c) { must(me() && me().role === "admin", "row-level security"); const row = { id: "cp" + ++n, ...c }; db.campaigns.push(row); return row; },
+    async deleteCampaign(id) { db.campaigns = db.campaigns.filter((c) => c.id !== id); },
     async geocode(q) { return /nada/i.test(q) ? null : { lat: 32.5149, lng: -117.0382 }; },
   };
   return api;
@@ -406,9 +413,11 @@ test("el texto escrito por usuarios no se ejecuta como HTML", async () => {
   assert.equal(doc.querySelectorAll("#pet-grid img[onerror]").length, 0);
 });
 
-test("las fotos son archivos externos y el HTML pesa menos de 100 KB", () => {
+// Las fotos van como archivos en images/ (antes estaban en base64 y el HTML pesaba MB).
+// El límite deja margen para nuevas funciones; Netlify lo sirve comprimido (~26 KB).
+test("las fotos son archivos externos y el HTML pesa menos de 128 KB", () => {
   assert.ok(!/data:image\/jpeg;base64/.test(html));
-  assert.ok(Buffer.byteLength(html) < 100 * 1024);
+  assert.ok(Buffer.byteLength(html) < 128 * 1024);
 });
 
 // ---------- Seguimiento posterior a la adopción ----------
@@ -590,4 +599,44 @@ test("al publicar se guardan el sexo y la salud de la mascota", async () => {
   assert.equal(pet.sex, "hembra");
   assert.equal(pet.vacunado, true);
   assert.equal(pet.esterilizado, false);
+});
+
+/* ====== Campañas ====== */
+test("el mapa muestra las campañas vigentes y oculta las terminadas", async () => {
+  api.db.campaigns.push(
+    { id: "c1", title: "Vacunación gratis", kind: "vacunacion", organizer: "Huellas", address: "Parque", lat: 32.53, lng: -117.04, starts_on: isoDay(-1), ends_on: isoDay(2), cost: "Gratis", details: null },
+    { id: "c2", title: "Esterilización", kind: "esterilizacion", organizer: null, address: null, lat: 32.52, lng: -117.02, starts_on: isoDay(3), ends_on: isoDay(4), cost: null, details: null },
+    { id: "c3", title: "Campaña vieja", kind: "adopcion", organizer: null, address: null, lat: 32.5, lng: -117.0, starts_on: isoDay(-10), ends_on: isoDay(-5), cost: null, details: null });
+  await win.continueAsGuest();
+  await win.goTo("mapa");
+  const box = doc.getElementById("campaigns-list");
+  assert.equal(box.querySelectorAll(".camp-card").length, 2);
+  assert.doesNotMatch(box.textContent, /Campaña vieja/);
+  assert.match(box.textContent, /En curso/);
+  assert.match(box.textContent, /Empieza en 3 días/);
+  doc.querySelector('#place-chips .chip[data-kind="campana"]').click();
+  const items = [...doc.querySelectorAll("#places-list .place-item")].map((x) => x.dataset.id);
+  assert.deepEqual(items, ["camp-c1", "camp-c2"], "el filtro Campañas lista solo campañas");
+  doc.querySelector('#place-chips .chip[data-kind="veterinaria"]').click();
+  assert.equal(doc.querySelectorAll("#places-list .place-item").length, 1);
+});
+
+test("el admin publica y elimina una campaña con fechas válidas", async () => {
+  api.db.users.push({ id: "admin1", email: "admin@x.com", password: "pw", name: "Admin", role: "admin", verified: true });
+  set("login-email", "admin@x.com"); set("login-password", "pw");
+  await win.handleLogin(ev);
+  await tick();
+  set("cp-title", "Jornada de vacunación"); doc.getElementById("cp-kind").value = "vacunacion";
+  set("cp-start", isoDay(5)); set("cp-end", isoDay(2)); set("cp-lat", "32.53"); set("cp-lng", "-117.04");
+  await win.handleCampaign(ev);
+  assert.match(doc.getElementById("campaign-error").textContent, /antes del inicio/);
+  assert.equal(api.db.campaigns.length, 0);
+  set("cp-end", isoDay(6));
+  await win.handleCampaign(ev);
+  assert.equal(api.db.campaigns.length, 1);
+  assert.equal(api.db.campaigns[0].starts_on, isoDay(5));
+  assert.match(doc.getElementById("admin-campaigns").textContent, /Jornada de vacunación/);
+  doc.querySelector('[data-delcamp="' + api.db.campaigns[0].id + '"]').click();
+  await tick();
+  assert.equal(api.db.campaigns.length, 0);
 });
