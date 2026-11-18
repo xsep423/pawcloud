@@ -19,6 +19,7 @@ drop function if exists public.set_pet_moderation() cascade;
 drop function if exists public.guard_pet_update() cascade;
 drop function if exists public.stamp_request_status() cascade;
 drop function if exists public.notify_request_status() cascade;
+drop function if exists public.request_status_effects() cascade;
 drop type if exists public.user_role cascade;
 
 -- ---------- Tipos y tablas ----------
@@ -65,7 +66,8 @@ create table public.adoption_requests (
   housing_type text,
   other_pets text,
   message text,
-  status text not null default 'pendiente' check (status in ('pendiente','en_revision','aceptada','periodo_prueba','completada','rechazada')),
+  status text not null default 'pendiente' check (status in ('pendiente','en_revision','aceptada','periodo_prueba','completada','rechazada','devuelta')),
+  close_reason text check (close_reason is null or close_reason in ('adoptada_otra')),
   created_at timestamptz not null default now(),
   reviewed_at timestamptz,
   approved_at timestamptz,
@@ -332,3 +334,26 @@ end $$;
 drop trigger if exists notify_request_status on public.adoption_requests;
 create trigger notify_request_status after update on public.adoption_requests
   for each row execute function public.notify_request_status();
+
+-- ---------- Efectos de los cambios de estado ----------
+-- Efectos de cada cambio de estado, hechos por la base de datos (no dependen de quién apruebe):
+--   aceptada → la mascota sale del catálogo y las demás solicitudes abiertas por ella se cierran
+--   devuelta → la mascota vuelve al catálogo
+create or replace function public.request_status_effects() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status then
+    if new.status = 'aceptada' then
+      update public.pets set status = 'adoptada' where id = new.pet_id;
+      update public.adoption_requests set status = 'rechazada', close_reason = 'adoptada_otra'
+       where pet_id = new.pet_id and id <> new.id and status in ('pendiente','en_revision');
+    elsif new.status = 'devuelta' then
+      update public.pets set status = 'disponible' where id = new.pet_id;
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists request_status_effects on public.adoption_requests;
+create trigger request_status_effects after update on public.adoption_requests
+  for each row execute function public.request_status_effects();

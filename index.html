@@ -214,6 +214,7 @@
   .badge.en_revision{background:#7A5C8C; color:#fff;}
   .badge.periodo_prueba{background:#3E7C8C; color:#fff;}
   .badge.completada{background:var(--forest-dk); color:#fff;}
+  .badge.devuelta{background:var(--ink-soft); color:#fff;}
   /* Línea de tiempo de la solicitud de adopción */
   .req-card{border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:6px;}
   .req-card .req-item{border-bottom:none;}
@@ -820,7 +821,6 @@
       },
       async respondRequest(req, status, extra){
         ok(await sb.from("adoption_requests").update(Object.assign({ status }, extra || {})).eq("id", req.id));
-        if(status === "aceptada") ok(await sb.from("pets").update({ status:"adoptada" }).eq("id", req.pet_id));
       },
       async pendingRefuges(){ return ok(await sb.from("profiles").select("*").eq("role","refugio").eq("verified", false)); },
       async allRequests(){
@@ -854,7 +854,7 @@
         return r.count || 0;
       },
       async myNotifications(uid){
-        return ok(await sb.from("notifications").select("*, adoption_requests(id, pets(name))").eq("user_id", uid).is("read_at", null).order("created_at", { ascending:false }).limit(10));
+        return ok(await sb.from("notifications").select("*, adoption_requests(id, close_reason, pets(name))").eq("user_id", uid).is("read_at", null).order("created_at", { ascending:false }).limit(10));
       },
       async markNotificationsRead(uid){ ok(await sb.from("notifications").update({ read_at:new Date().toISOString() }).eq("user_id", uid).is("read_at", null)); },
       async listCampaigns(){ return ok(await sb.from("campaigns").select("*").gte("ends_on", todayISO()).order("starts_on")); },
@@ -1196,18 +1196,25 @@
      pendiente → en_revision → aceptada → periodo_prueba (15 días) → completada  (o rechazada) */
   const ADOPTED = ["aceptada", "periodo_prueba", "completada"];
   const isOpen = s => s === "pendiente" || s === "en_revision";
-  const REQ_LABEL = { pendiente:"Pendiente", en_revision:"En revisión", aceptada:"Aprobada", periodo_prueba:"Periodo de prueba", completada:"Completada", rechazada:"Rechazada" };
+  const REQ_LABEL = { pendiente:"Pendiente", en_revision:"En revisión", aceptada:"Aprobada", periodo_prueba:"Periodo de prueba", completada:"Completada", rechazada:"Rechazada", devuelta:"Devuelta" };
   const REQ_STEPS = [
     ["pendiente", "Enviada", "created_at"], ["en_revision", "En revisión", "reviewed_at"], ["aceptada", "Aprobada", "approved_at"],
     ["periodo_prueba", "Periodo de prueba", "trial_until"], ["completada", "Completada", "completed_at"]
   ];
   const REQ_NEXT = { pendiente:["en_revision", "Pasar a revisión"], en_revision:["aceptada", "Aprobar"], aceptada:["periodo_prueba", "Iniciar prueba (15 días)"], periodo_prueba:["completada", "Completar adopción"] };
   const shortDate = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("es-MX", { day:"numeric", month:"short" }) : "";
-  const reqBadge = r => '<span class="badge ' + esc(r.status) + '">' + esc(REQ_LABEL[r.status] || cap(r.status)) + "</span>";
+  const reqBadge = r => '<span class="badge ' + esc(r.status) + '">' + esc(r.close_reason === "adoptada_otra" ? "Cerrada" : REQ_LABEL[r.status] || cap(r.status)) + "</span>";
   function reqTimeline(r){
     if(r.status === "rechazada"){
       return '<ol class="req-timeline"><li class="done"><i></i><b>Enviada</b><small>' + esc(shortDate(r.created_at)) + "</small></li>" +
-        '<li class="rejected"><i></i><b>Rechazada</b></li></ol>';
+        '<li class="rejected"><i></i><b>' + (r.close_reason === "adoptada_otra" ? "Adoptada por otra familia" : "Rechazada") + "</b></li></ol>";
+    }
+    if(r.status === "devuelta"){
+      // Pasos que sí se cumplieron y luego la devolución
+      const reached = REQ_STEPS.slice(0, r.trial_until ? 4 : 3);
+      return '<ol class="req-timeline" aria-label="Estado: Devuelta">' + reached.map(([key, label, field]) =>
+        '<li class="done"><i></i><b>' + esc(label) + "</b><small>" + esc(r[field] && key !== "periodo_prueba" ? shortDate(r[field]) : "") + "</small></li>").join("") +
+        '<li class="rejected" aria-current="step"><i></i><b>Devuelta</b></li></ol>';
     }
     const idx = Math.max(0, REQ_STEPS.findIndex(s => s[0] === r.status));
     return '<ol class="req-timeline" aria-label="Estado: ' + esc(REQ_LABEL[r.status] || r.status) + '">' + REQ_STEPS.map(([key, label, field], i) => {
@@ -1234,7 +1241,7 @@
       "Tu periodo de prueba dura" + (r.trial_until ? " hasta el " + shortDate(r.trial_until) : " 15 días") + ". Si algo no funciona, habla con el refugio antes de esa fecha.",
       "Al terminar, el refugio confirmará la adopción."];
     else if(r.status === "completada") steps = ["Sigue llevando el control de vacunas, desparasitación y citas en Mis mascotas."];
-    else if(r.status === "rechazada") steps = ["Hay más mascotas esperando un hogar en el catálogo."];
+    else if(r.status === "rechazada" || r.status === "devuelta") steps = ["Hay más mascotas esperando un hogar en el catálogo."];
     if(!steps.length) return "";
     return '<div class="req-next"><b class="title">Siguientes pasos</b>' + top + "<ul>" + steps.map(t => "<li>" + esc(t) + "</li>").join("") + "</ul>" +
       (r.refuge_note ? '<p class="note">Mensaje del refugio: “' + esc(r.refuge_note) + "”</p>" : "") + "</div>";
@@ -1247,7 +1254,8 @@
       aceptada: "¡Aprobada! " + (r.pickup_at ? "Ya tienes día y hora para recoger a " + name + "." : "El refugio te contactará para entregarte a " + name + "."),
       periodo_prueba: "Periodo de prueba" + (r.trial_until ? " hasta el " + shortDate(r.trial_until) : "") + ": registra sus vacunas y citas en Mis mascotas.",
       completada: "¡Adopción completada! Gracias por darle un hogar a " + name + ".",
-      rechazada: "Esta vez no fue posible. Hay más mascotas esperando en el catálogo."
+      rechazada: r.close_reason === "adoptada_otra" ? name + " ya fue adoptada por otra familia. Gracias por tu interés." : "Esta vez no fue posible. Hay más mascotas esperando en el catálogo.",
+      devuelta: "La adopción no continuó y " + name + " regresó al refugio. Gracias por intentarlo."
     }[r.status] || "";
   }
   // Botones del refugio/admin según el estado: avanzar al siguiente paso o rechazar
@@ -1255,9 +1263,17 @@
     const nx = REQ_NEXT[r.status];
     if(!nx) return reqBadge(r);
     return reqBadge(r) + '<div class="req-actions"><button class="accept" ' + attr + '="' + esc(r.id) + '" data-st="' + nx[0] + '">' + esc(nx[1]) + "</button>" +
-      (isOpen(r.status) ? '<button class="decline" ' + attr + '="' + esc(r.id) + '" data-st="rechazada">Rechazar</button>' : "") + "</div>";
+      (isOpen(r.status) ? '<button class="decline" ' + attr + '="' + esc(r.id) + '" data-st="rechazada">Rechazar</button>' : "") +
+      (r.status === "aceptada" || r.status === "periodo_prueba" ? '<button class="decline" ' + attr + '="' + esc(r.id) + '" data-st="devuelta" title="La mascota regresó al refugio">Devolución</button>' : "") + "</div>";
   }
-  const reqToast = st => "Solicitud: " + (REQ_LABEL[st] || st).toLowerCase() + ".";
+  const reqToast = st => st === "devuelta" ? "Adopción cerrada: la mascota vuelve al catálogo." : "Solicitud: " + (REQ_LABEL[st] || st).toLowerCase() + ".";
+  // Confirmaciones antes de rechazar o registrar una devolución
+  function confirmResponse(st, req){
+    const pet = req && req.pets ? req.pets.name : "la mascota";
+    if(st === "rechazada") return window.confirm("¿Rechazar esta solicitud?");
+    if(st === "devuelta") return window.confirm("¿" + pet + " regresó al refugio? La adopción se cerrará y " + pet + " volverá a aparecer en el catálogo.");
+    return true;
+  }
   const DEFAULT_NOTE = "Trae tu identificación oficial y un comprobante de domicilio. Te recomendamos traer collar y correa (o transportadora).";
   // Al aprobar se pide día, hora y lugar para recoger a la mascota
   let lastPickupPlace = "";   // se recuerda el último lugar usado en esta sesión
@@ -1298,7 +1314,8 @@
     aceptada: n => "¡Tu solicitud para " + n + " fue aprobada! Revisa cuándo y dónde recogerla.",
     periodo_prueba: n => "Empezó tu periodo de prueba de 15 días con " + n + ".",
     completada: n => "¡La adopción de " + n + " está completa!",
-    rechazada: n => "Tu solicitud para " + n + " no fue aprobada esta vez."
+    rechazada: (n, req) => req && req.close_reason === "adoptada_otra" ? n + " fue adoptada por otra familia, así que tu solicitud se cerró." : "Tu solicitud para " + n + " no fue aprobada esta vez.",
+    devuelta: n => "La adopción de " + n + " se cerró: regresó al refugio."
   };
   let unread = 0;
   async function refreshUnread(){
@@ -1316,7 +1333,7 @@
       if(!rows.length) return;
       box.innerHTML = '<div class="notif-box" role="status"><h3>🔔 Novedades</h3>' + rows.map(n => {
         const pet = n.adoption_requests && n.adoption_requests.pets ? n.adoption_requests.pets.name : "tu mascota";
-        const txt = NOTIF_TEXT[n.status] ? NOTIF_TEXT[n.status](pet) : "Tu solicitud cambió de estado.";
+        const txt = NOTIF_TEXT[n.status] ? NOTIF_TEXT[n.status](pet, n.adoption_requests) : "Tu solicitud cambió de estado.";
         return '<div class="notif-item">' + esc(txt) + "<small>" + esc(shortDate(n.created_at)) + "</small></div>";
       }).join("") + "</div>";
       await API.markNotificationsRead(session.id);
@@ -1400,7 +1417,7 @@
       reqs.querySelectorAll(".req-actions button").forEach(b => b.addEventListener("click", async () => {
         const req = received.find(r => r.id === b.dataset.id);
         if(b.dataset.st === "aceptada"){ openApproveForm(b.closest(".req-item"), req, loadPanel); return; }
-        if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
+        if(!confirmResponse(b.dataset.st, req)) return;
         try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadPanel(); }
         catch(err){ toast(friendlyError(err)); }
       }));
@@ -1469,7 +1486,7 @@
       box.querySelectorAll("[data-areq]").forEach(b => b.addEventListener("click", async () => {
         const req = rows.find(r => r.id === b.dataset.areq);
         if(b.dataset.st === "aceptada"){ openApproveForm(b.closest(".req-item"), req, loadAdminRequests); return; }
-        if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
+        if(!confirmResponse(b.dataset.st, req)) return;
         try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadAdminRequests(); } catch(err){ toast(friendlyError(err)); }
       }));
     } catch(err){ box.innerHTML = '<p class="list-empty">' + esc(friendlyError(err)) + "</p>"; }

@@ -61,13 +61,23 @@ function makeFakeApi() {
     async receivedRequests(uid) {
       return db.reqs.map((r) => ({ ...r, pets: db.pets.find((p) => p.id === r.pet_id) })).filter((r) => r.pets && r.pets.owner_id === uid);
     },
+    // Simula los triggers de Supabase: fechas, notificación y efectos del cambio de estado
     async respondRequest(req, status, extra) {
-      const row = db.reqs.find((r) => r.id === req.id);
-      if (row.status !== status) db.notifs.push({ id: "n" + ++n, user_id: row.adopter_id, request_id: row.id, status, read_at: null, created_at: new Date().toISOString() });
-      Object.assign(row, extra || {});
-      row.status = status;
-      if (status === "periodo_prueba") row.trial_until = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10);
-      if (status === "aceptada") db.pets.find((p) => p.id === req.pet_id).status = "adoptada";
+      const setStatus = (row, st, more) => {
+        if (row.status !== st) db.notifs.push({ id: "n" + ++n, user_id: row.adopter_id, request_id: row.id, status: st, read_at: null, created_at: new Date().toISOString() });
+        Object.assign(row, more || {});
+        const changed = row.status !== st;
+        row.status = st;
+        if (st === "periodo_prueba") row.trial_until = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10);
+        if (!changed) return;
+        if (st === "aceptada") {
+          db.pets.find((p) => p.id === row.pet_id).status = "adoptada";
+          db.reqs.filter((o) => o.pet_id === row.pet_id && o.id !== row.id && ["pendiente", "en_revision"].includes(o.status))
+            .forEach((o) => setStatus(o, "rechazada", { close_reason: "adoptada_otra" }));
+        }
+        if (st === "devuelta") db.pets.find((p) => p.id === row.pet_id).status = "disponible";
+      };
+      setStatus(db.reqs.find((r) => r.id === req.id), status, extra);
     },
     async pendingRefuges() { return db.users.filter((u) => u.role === "refugio" && !u.verified); },
     async allRequests() { return db.reqs.map((r) => ({ ...r, pets: db.pets.find((p) => p.id === r.pet_id) })); },
@@ -93,7 +103,7 @@ function makeFakeApi() {
     async unreadCount(uid) { return db.notifs.filter((x) => x.user_id === uid && !x.read_at).length; },
     async myNotifications(uid) {
       return db.notifs.filter((x) => x.user_id === uid && !x.read_at).reverse()
-        .map((x) => ({ ...x, adoption_requests: { id: x.request_id, pets: db.pets.find((p) => p.id === (db.reqs.find((r) => r.id === x.request_id) || {}).pet_id) } }));
+        .map((x) => { const r = db.reqs.find((q) => q.id === x.request_id) || {}; return { ...x, adoption_requests: { id: x.request_id, close_reason: r.close_reason || null, pets: db.pets.find((p) => p.id === r.pet_id) } }; });
     },
     async markNotificationsRead(uid) { db.notifs.filter((x) => x.user_id === uid).forEach((x) => { x.read_at = new Date().toISOString(); }); },
     async listCampaigns() { const today = isoDay(0); return db.campaigns.filter((c) => c.ends_on >= today).sort((a, b) => a.starts_on.localeCompare(b.starts_on)); },
@@ -708,4 +718,60 @@ test("el adoptante recibe novedades y ve cuándo y dónde recoger a su mascota",
   assert.match(next, /Calle 5 #123/);
   assert.match(next, /Trae una cobija/);
   assert.ok(me);
+});
+
+/* ====== Cierre automático y devolución ====== */
+test("al aprobar una solicitud las demás por la misma mascota se cierran y se avisa", async () => {
+  await register("refugio", "Rosa", "rosa@refugio.com", "Huellas AC");
+  const ref = api.db.users.find((u) => u.email === "rosa@refugio.com"); ref.verified = true;
+  api.db.users.push({ id: "uB", email: "beto@x.com", password: "pw", name: "Beto", role: "adoptante", verified: true });
+  api.db.pets.push({ ...SEED[0], id: "petL", name: "Lola", owner_id: ref.id });
+  const now = new Date().toISOString();
+  api.db.reqs.push({ id: "qA", pet_id: "petL", adopter_id: "uA", adopter_name: "Ana", status: "en_revision", created_at: now },
+    { id: "qB", pet_id: "petL", adopter_id: "uB", adopter_name: "Beto", status: "pendiente", created_at: now },
+    { id: "qZ", pet_id: "seed1", adopter_id: "uB", adopter_name: "Beto", status: "pendiente", created_at: now });
+  await win.goTo("panel");
+  doc.querySelector('#panel-requests [data-id="qA"][data-st="aceptada"]').click();
+  const form = doc.querySelector(".approve-form");
+  form.elements.place.value = "Refugio Huellas";
+  form.requestSubmit();
+  await tick();
+  assert.equal(api.db.reqs.find((r) => r.id === "qB").status, "rechazada");
+  assert.equal(api.db.reqs.find((r) => r.id === "qB").close_reason, "adoptada_otra");
+  assert.equal(api.db.reqs.find((r) => r.id === "qZ").status, "pendiente", "las de otras mascotas no se tocan");
+  // Beto entra y ve por qué se cerró
+  await win.endSession();
+  set("login-email", "beto@x.com"); set("login-password", "pw");
+  await win.handleLogin(ev);
+  await win.goTo("seguimiento");
+  await tick();
+  assert.match(doc.getElementById("my-notifs").textContent, /Lola fue adoptada por otra familia/);
+  assert.match(doc.getElementById("my-requests").textContent, /Adoptada por otra familia/);
+});
+
+test("el refugio registra una devolución y la mascota vuelve al catálogo", async () => {
+  await register("refugio", "Rosa", "rosa@refugio.com", "Huellas AC");
+  const ref = api.db.users.find((u) => u.email === "rosa@refugio.com"); ref.verified = true;
+  api.db.pets.push({ ...SEED[0], id: "petD", name: "Dante", owner_id: ref.id, status: "adoptada" });
+  api.db.reqs.push({ id: "qD", pet_id: "petD", adopter_id: "uA", adopter_name: "Ana", status: "periodo_prueba", trial_until: "2030-01-01", created_at: new Date().toISOString() });
+  await win.goTo("panel");
+  const btn = doc.querySelector('#panel-requests [data-id="qD"][data-st="devuelta"]');
+  assert.ok(btn, "en periodo de prueba aparece el botón Devolución");
+  btn.click();
+  await tick();
+  assert.equal(api.db.reqs.find((r) => r.id === "qD").status, "devuelta");
+  assert.equal(api.db.pets.find((p) => p.id === "petD").status, "disponible");
+  assert.match(doc.getElementById("toast").textContent, /vuelve al catálogo/);
+  assert.equal(doc.querySelector('#panel-requests [data-id="qD"]'), null, "ya no tiene botones");
+});
+
+test("el adoptante ve la devolución en su línea de tiempo", async () => {
+  await register("adoptante", "Ana", "ana@correo.com");
+  api.db.reqs.push({ id: "qD", pet_id: "seed3", adopter_id: api.db.users[0].id, status: "devuelta", trial_until: "2030-01-01", approved_at: new Date().toISOString(), created_at: new Date().toISOString() });
+  await win.goTo("seguimiento");
+  const box = doc.getElementById("my-requests");
+  assert.equal(box.querySelectorAll(".req-timeline li.done").length, 4);
+  assert.match(box.querySelector(".req-timeline li.rejected").textContent, /Devuelta/);
+  assert.match(box.textContent, /regresó al refugio/);
+  assert.equal(box.querySelector("[data-care]"), null, "ya no lleva seguimiento");
 });
