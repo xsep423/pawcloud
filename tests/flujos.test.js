@@ -23,7 +23,7 @@ const SEED = [
 const isoDay = (n) => { const d = new Date(Date.now() + n * 864e5); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 
 function makeFakeApi() {
-  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], care: [], campaigns: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
+  const db = { users: [], pets: SEED.map((p) => ({ ...p })), reqs: [], care: [], campaigns: [], notifs: [], places: [{ id: "pl0", name: "Vet Demo", kind: "veterinaria", address: "Calle 1", phone: "664 000 0000", lat: 32.52, lng: -117.12 }] };
   let n = 0, current = null;
   const me = () => db.users.find((u) => u.id === current);
   const must = (c, m) => { if (!c) throw new Error(m); };
@@ -61,8 +61,10 @@ function makeFakeApi() {
     async receivedRequests(uid) {
       return db.reqs.map((r) => ({ ...r, pets: db.pets.find((p) => p.id === r.pet_id) })).filter((r) => r.pets && r.pets.owner_id === uid);
     },
-    async respondRequest(req, status) {
+    async respondRequest(req, status, extra) {
       const row = db.reqs.find((r) => r.id === req.id);
+      if (row.status !== status) db.notifs.push({ id: "n" + ++n, user_id: row.adopter_id, request_id: row.id, status, read_at: null, created_at: new Date().toISOString() });
+      Object.assign(row, extra || {});
       row.status = status;
       if (status === "periodo_prueba") row.trial_until = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10);
       if (status === "aceptada") db.pets.find((p) => p.id === req.pet_id).status = "adoptada";
@@ -88,6 +90,12 @@ function makeFakeApi() {
     async listPlaces() { return db.places.slice(); },
     async addPlace(p) { const row = { id: "pl" + ++n, ...p }; db.places.push(row); return row; },
     async deletePlace(id) { db.places = db.places.filter((p) => p.id !== id); },
+    async unreadCount(uid) { return db.notifs.filter((x) => x.user_id === uid && !x.read_at).length; },
+    async myNotifications(uid) {
+      return db.notifs.filter((x) => x.user_id === uid && !x.read_at).reverse()
+        .map((x) => ({ ...x, adoption_requests: { id: x.request_id, pets: db.pets.find((p) => p.id === (db.reqs.find((r) => r.id === x.request_id) || {}).pet_id) } }));
+    },
+    async markNotificationsRead(uid) { db.notifs.filter((x) => x.user_id === uid).forEach((x) => { x.read_at = new Date().toISOString(); }); },
     async listCampaigns() { const today = isoDay(0); return db.campaigns.filter((c) => c.ends_on >= today).sort((a, b) => a.starts_on.localeCompare(b.starts_on)); },
     async allCampaigns() { return db.campaigns.slice(); },
     async addCampaign(c) { must(me() && me().role === "admin", "row-level security"); const row = { id: "cp" + ++n, ...c }; db.campaigns.push(row); return row; },
@@ -324,8 +332,16 @@ test("el refugio acepta una solicitud y la mascota sale del catálogo", async ()
   assert.equal(api.db.reqs[0].status, "en_revision", "primero pasa a revisión");
   assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "disponible");
   doc.querySelector('#panel-requests [data-st="aceptada"]').click();
+  const form = doc.querySelector("#panel-requests .approve-form");
+  assert.ok(form, "aprobar pide día, hora y lugar");
+  assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "disponible", "todavía no se aprueba");
+  form.elements.place.value = "Calle 5 #123, Col. Libertad";
+  form.requestSubmit();
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(api.db.pets.find((p) => p.id === pet.id).status, "adoptada");
+  assert.equal(api.db.reqs[0].pickup_place, "Calle 5 #123, Col. Libertad");
+  assert.ok(api.db.reqs[0].pickup_at > new Date().toISOString());
+  assert.match(api.db.reqs[0].refuge_note, /identificación/);
 });
 
 test("la solicitud recorre todos los pasos y el adoptante ve la línea de tiempo", async () => {
@@ -506,6 +522,9 @@ test("el admin ve las solicitudes y responde las de mascotas sin responsable", a
   await tick();
   assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "en_revision");
   doc.getElementById("admin-requests").querySelector('[data-areq="q1"][data-st="aceptada"]').click();
+  const form = doc.querySelector("#admin-requests .approve-form");
+  form.elements.place.value = "Oficina PawCloud";
+  form.requestSubmit();
   await tick();
   assert.equal(api.db.reqs.find((r) => r.id === "q1").status, "aceptada");
   assert.equal(api.db.pets.find((p) => p.id === "seed2").status, "adoptada");
@@ -639,4 +658,54 @@ test("el admin publica y elimina una campaña con fechas válidas", async () => 
   doc.querySelector('[data-delcamp="' + api.db.campaigns[0].id + '"]').click();
   await tick();
   assert.equal(api.db.campaigns.length, 0);
+});
+
+/* ====== Entrega y notificaciones ====== */
+test("aprobar sin lugar o con una fecha pasada muestra un error", async () => {
+  await register("refugio", "Rosa", "rosa@refugio.com", "Huellas AC");
+  api.db.users.find((u) => u.email === "rosa@refugio.com").verified = true;
+  api.db.pets.push({ ...SEED[0], id: "petX", name: "Bruno", owner_id: api.db.users[0].id });
+  api.db.reqs.push({ id: "rq", pet_id: "petX", adopter_id: "x", adopter_name: "Mariana", status: "en_revision", created_at: new Date().toISOString() });
+  await win.goTo("panel");
+  doc.querySelector('#panel-requests [data-st="aceptada"]').click();
+  const form = doc.querySelector(".approve-form");
+  form.elements.when.value = "2020-01-01T10:00";
+  form.elements.place.value = "Refugio";
+  form.requestSubmit();
+  await tick();
+  assert.match(form.querySelector(".auth-error").textContent, /no hayan pasado/);
+  assert.equal(api.db.reqs[0].status, "en_revision");
+  form.querySelector("[data-cancel-approve]").click();
+  assert.equal(doc.querySelector(".approve-form"), null);
+});
+
+test("el adoptante recibe novedades y ve cuándo y dónde recoger a su mascota", async () => {
+  await register("adoptante", "Ana Prueba", "ana@correo.com");
+  const me = api.db.users[0];
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  doc.getElementById("solicitud-ok").checked = true;
+  await win.handleSolicitud(ev);
+  const box = doc.getElementById("my-requests");
+  assert.match(box.querySelector(".req-next").textContent, /Siguientes pasos/);
+  const req = api.db.reqs[0];
+  await api.respondRequest(req, "en_revision");
+  await api.respondRequest(req, "aceptada", { pickup_at: "2030-11-21T19:00:00.000Z", pickup_place: "Calle 5 #123, Col. Libertad", refuge_note: "Trae una cobija" });
+  await win.endSession();
+  set("login-email", "ana@correo.com"); set("login-password", "secreta123");
+  await win.handleLogin(ev);
+  assert.match(doc.getElementById("toast").textContent, /2 novedades/);
+  assert.match(doc.querySelector('#nav button[data-screen="seguimiento"]').textContent, /2/);
+  await win.goTo("seguimiento");
+  await tick();
+  const notifs = doc.getElementById("my-notifs").textContent;
+  assert.match(notifs, /empezó a revisar tu solicitud para Luna/);
+  assert.match(notifs, /Luna fue aprobada/);
+  assert.equal(api.db.notifs.filter((x) => !x.read_at).length, 0, "al verlas se marcan como leídas");
+  assert.doesNotMatch(doc.querySelector('#nav button[data-screen="seguimiento"]').textContent, /\d/);
+  const next = box.querySelector(".req-next").textContent;
+  assert.match(next, /Recoge a Luna el/);
+  assert.match(next, /Calle 5 #123/);
+  assert.match(next, /Trae una cobija/);
+  assert.ok(me);
 });

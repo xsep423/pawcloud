@@ -232,6 +232,25 @@
   .req-timeline li.rejected::before{background:var(--clay);}
   .req-timeline li.rejected i{background:var(--clay); border-color:var(--clay);}
   .req-hint{font-size:13px; color:var(--ink-soft); margin:0;}
+  /* Siguientes pasos para el adoptante */
+  .req-next{background:var(--paper-2); border-radius:var(--radius); padding:10px 14px; font-size:13px; margin-top:8px;}
+  .req-next b.title{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-soft); margin-bottom:4px;}
+  .req-next ul{margin:0; padding-left:18px;}
+  .req-next li{margin:2px 0;}
+  .req-next .pickup{display:block; font-size:14.5px; font-weight:700; color:var(--forest); margin:2px 0 6px;}
+  .req-next .note{font-style:italic; margin:6px 0 0;}
+  /* Formulario de aprobación (refugio/admin) */
+  .approve-form{border:1.5px solid var(--forest); border-radius:var(--radius); padding:12px 14px; margin:0 0 12px; display:flex; flex-direction:column; gap:8px; background:var(--card);}
+  .approve-form label{display:flex; flex-direction:column; gap:3px; font-size:12.5px; font-weight:600;}
+  .approve-form input,.approve-form textarea{font:inherit; font-weight:400; padding:7px 9px; border:1.5px solid var(--line); border-radius:var(--radius); background:var(--card); color:var(--ink);}
+  .approve-form textarea{min-height:60px; resize:vertical;}
+  /* Novedades (notificaciones) */
+  .notif-box{border:1.5px solid var(--mustard); background:#F4E3BE33; border-radius:var(--radius); padding:10px 14px; margin-bottom:18px;}
+  .notif-box h3{margin:0 0 6px; font-size:14px;}
+  .notif-item{font-size:13.5px; padding:5px 0; border-bottom:1px solid var(--line);}
+  .notif-item:last-child{border-bottom:none;}
+  .notif-item small{color:var(--ink-soft); margin-left:6px;}
+  .nav-count{display:inline-block; min-width:18px; padding:0 5px; margin-left:5px; border-radius:999px; background:var(--clay); color:#fff; font-size:11px; line-height:18px; text-align:center; font-weight:700;}
   @media(max-width:560px){ .req-timeline li b{font-size:10.5px;} .req-timeline li small{display:none;} }
   .section-title{font-family:var(--font-head); font-weight:600; font-size:20px; margin:0 0 10px;}
   .req-item img{width:44px; height:44px; object-fit:cover; border-radius:var(--radius); flex:none;}
@@ -541,6 +560,7 @@
   <!-- SEGUIMIENTO (adoptante) -->
   <section class="screen" id="seguimiento">
     <div class="hero"><div><h2>Mis solicitudes</h2><p>Aquí ves el estado de cada adopción que pediste.</p></div></div>
+    <div id="my-notifs"></div>
     <div id="my-requests"></div>
     <p class="care-tip" style="margin-top:24px;">Cuando aprueban una solicitud, la mascota aparece en <button type="button" class="link-btn" onclick="goTo('mismascotas')">Mis mascotas</button> para llevar su seguimiento de vacunas y citas.</p>
   </section>
@@ -798,8 +818,8 @@
       async receivedRequests(uid){
         return ok(await sb.from("adoption_requests").select("*, pets!inner(name, owner_id, photo_url)").eq("pets.owner_id", uid).order("created_at", { ascending:false }));
       },
-      async respondRequest(req, status){
-        ok(await sb.from("adoption_requests").update({ status }).eq("id", req.id));
+      async respondRequest(req, status, extra){
+        ok(await sb.from("adoption_requests").update(Object.assign({ status }, extra || {})).eq("id", req.id));
         if(status === "aceptada") ok(await sb.from("pets").update({ status:"adoptada" }).eq("id", req.pet_id));
       },
       async pendingRefuges(){ return ok(await sb.from("profiles").select("*").eq("role","refugio").eq("verified", false)); },
@@ -828,6 +848,15 @@
       async listPlaces(){ return ok(await sb.from("places").select("*").order("name")); },
       async addPlace(p){ return ok(await sb.from("places").insert(p).select().single()); },
       async deletePlace(id){ ok(await sb.from("places").delete().eq("id", id)); },
+      async unreadCount(uid){
+        const r = await sb.from("notifications").select("id", { count:"exact", head:true }).eq("user_id", uid).is("read_at", null);
+        if(r.error) fail(r.error);
+        return r.count || 0;
+      },
+      async myNotifications(uid){
+        return ok(await sb.from("notifications").select("*, adoption_requests(id, pets(name))").eq("user_id", uid).is("read_at", null).order("created_at", { ascending:false }).limit(10));
+      },
+      async markNotificationsRead(uid){ ok(await sb.from("notifications").update({ read_at:new Date().toISOString() }).eq("user_id", uid).is("read_at", null)); },
       async listCampaigns(){ return ok(await sb.from("campaigns").select("*").gte("ends_on", todayISO()).order("starts_on")); },
       async allCampaigns(){ return ok(await sb.from("campaigns").select("*").order("starts_on", { ascending:false })); },
       async addCampaign(c){ return ok(await sb.from("campaigns").insert(c).select().single()); },
@@ -867,6 +896,7 @@
 
   async function goTo(id){
     showScreen(id);
+    if(id !== "seguimiento") refreshUnread();
     if(id === "catalogo") await loadCatalog();
     else if(id === "panel") await loadPanel();
     else if(id === "seguimiento") await loadMyRequests();
@@ -996,6 +1026,10 @@
   async function enterSession(profile, justRegistered){
     session = profile;
     renderNav();
+    if(profile.role === "adoptante" && !justRegistered){
+      await refreshUnread();
+      if(unread) toast("Tienes " + (unread === 1 ? "1 novedad" : unread + " novedades") + " en tus solicitudes.");
+    }
     if(profile.role === "admin"){ await goTo("admin"); return; }
     if(profile.role === "refugio" || profile.role === "rescatista"){ await goTo("panel"); return; }
     if(pendingPetId){
@@ -1183,12 +1217,34 @@
       return '<li class="' + cls + '"' + (i === idx ? ' aria-current="step"' : "") + "><i></i><b>" + esc(label) + "</b><small>" + esc(date) + "</small></li>";
     }).join("") + "</ol>";
   }
+  const fullDateTime = d => new Date(d).toLocaleString("es-MX", { weekday:"long", day:"numeric", month:"long", hour:"numeric", minute:"2-digit" });
+  // Qué tiene que hacer el adoptante en cada paso
+  function reqNext(r){
+    const name = r.pets ? r.pets.name : "tu mascota";
+    let steps = [], top = "";
+    if(r.status === "pendiente") steps = ["El refugio revisará tu solicitud en los próximos días.", "Ten tu teléfono a la mano: pueden llamarte para conocerte."];
+    else if(r.status === "en_revision") steps = ["El refugio puede contactarte para una entrevista o una visita a tu casa.", "Ve preparando una identificación oficial y un comprobante de domicilio."];
+    else if(r.status === "aceptada"){
+      if(r.pickup_at) top = '<span class="pickup">📅 Recoge a ' + esc(name) + " el " + esc(fullDateTime(r.pickup_at)) + (r.pickup_place ? "<br>📍 " + esc(r.pickup_place) : "") + "</span>";
+      steps = [r.pickup_at ? "Si no puedes ir a esa hora, avisa al refugio con tiempo." : "El refugio te dirá cuándo y dónde recoger a " + name + ".",
+        "Lleva tu identificación oficial, collar y correa (o transportadora).",
+        "Al recogerla empieza un periodo de prueba de 15 días."];
+    }
+    else if(r.status === "periodo_prueba") steps = ["Registra sus vacunas y citas en Mis mascotas.",
+      "Tu periodo de prueba dura" + (r.trial_until ? " hasta el " + shortDate(r.trial_until) : " 15 días") + ". Si algo no funciona, habla con el refugio antes de esa fecha.",
+      "Al terminar, el refugio confirmará la adopción."];
+    else if(r.status === "completada") steps = ["Sigue llevando el control de vacunas, desparasitación y citas en Mis mascotas."];
+    else if(r.status === "rechazada") steps = ["Hay más mascotas esperando un hogar en el catálogo."];
+    if(!steps.length) return "";
+    return '<div class="req-next"><b class="title">Siguientes pasos</b>' + top + "<ul>" + steps.map(t => "<li>" + esc(t) + "</li>").join("") + "</ul>" +
+      (r.refuge_note ? '<p class="note">Mensaje del refugio: “' + esc(r.refuge_note) + "”</p>" : "") + "</div>";
+  }
   function reqHint(r){
     const name = r.pets ? r.pets.name : "tu mascota";
     return {
       pendiente: "El refugio todavía no abre tu solicitud.",
       en_revision: "El refugio está revisando tu solicitud y puede contactarte para conocerte.",
-      aceptada: "¡Aprobada! El refugio te contactará para entregarte a " + name + ".",
+      aceptada: "¡Aprobada! " + (r.pickup_at ? "Ya tienes día y hora para recoger a " + name + "." : "El refugio te contactará para entregarte a " + name + "."),
       periodo_prueba: "Periodo de prueba" + (r.trial_until ? " hasta el " + shortDate(r.trial_until) : "") + ": registra sus vacunas y citas en Mis mascotas.",
       completada: "¡Adopción completada! Gracias por darle un hogar a " + name + ".",
       rechazada: "Esta vez no fue posible. Hay más mascotas esperando en el catálogo."
@@ -1202,9 +1258,74 @@
       (isOpen(r.status) ? '<button class="decline" ' + attr + '="' + esc(r.id) + '" data-st="rechazada">Rechazar</button>' : "") + "</div>";
   }
   const reqToast = st => "Solicitud: " + (REQ_LABEL[st] || st).toLowerCase() + ".";
+  const DEFAULT_NOTE = "Trae tu identificación oficial y un comprobante de domicilio. Te recomendamos traer collar y correa (o transportadora).";
+  // Al aprobar se pide día, hora y lugar para recoger a la mascota
+  let lastPickupPlace = "";   // se recuerda el último lugar usado en esta sesión
+  function openApproveForm(item, req, reload){
+    const prev = document.querySelector(".approve-form");
+    if(prev) prev.remove();
+    const f = document.createElement("form");
+    f.className = "approve-form";
+    const d = new Date(Date.now() + 2 * 864e5); d.setHours(11, 0, 0, 0);
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    f.innerHTML = "<b>Aprobar la solicitud de " + esc(req.adopter_name || "el adoptante") + "</b>" +
+      '<label>Día y hora para recoger a ' + esc(req.pets ? req.pets.name : "la mascota") + ' <input type="datetime-local" name="when" required value="' + local + '"></label>' +
+      '<label>Lugar <input type="text" name="place" maxlength="160" required placeholder="Calle, número y colonia del refugio" value="' + esc(lastPickupPlace) + '"></label>' +
+      '<label>Mensaje para el adoptante (opcional) <textarea name="note" maxlength="400">' + esc(DEFAULT_NOTE) + "</textarea></label>" +
+      '<p class="auth-error" role="alert"></p>' +
+      '<div class="req-actions"><button type="submit" class="accept">Confirmar aprobación</button><button type="button" class="decline" data-cancel-approve="1">Cancelar</button></div>';
+    item.after(f);
+    f.querySelector("[data-cancel-approve]").addEventListener("click", () => f.remove());
+    f.addEventListener("submit", async e => {
+      e.preventDefault();
+      const err = f.querySelector(".auth-error"), when = f.elements.when.value, place = f.elements.place.value.trim();
+      err.textContent = "";
+      if(!when || new Date(when) <= new Date()){ err.textContent = "Elige un día y hora que todavía no hayan pasado."; return; }
+      if(!place){ err.textContent = "Indica dónde recogerá a la mascota."; return; }
+      try {
+        lastPickupPlace = place;
+        await API.respondRequest(req, "aceptada", { pickup_at:new Date(when).toISOString(), pickup_place:place, refuge_note:f.elements.note.value.trim() || null });
+        toast("Solicitud aprobada. El adoptante verá el día y la hora para recogerla.");
+        await reload();
+      } catch(ex){ err.textContent = friendlyError(ex); }
+    });
+    f.elements.when.focus();
+  }
 
   /* ====== ADOPTANTE: MIS SOLICITUDES ====== */
+  const NOTIF_TEXT = {
+    en_revision: n => "El refugio empezó a revisar tu solicitud para " + n + ".",
+    aceptada: n => "¡Tu solicitud para " + n + " fue aprobada! Revisa cuándo y dónde recogerla.",
+    periodo_prueba: n => "Empezó tu periodo de prueba de 15 días con " + n + ".",
+    completada: n => "¡La adopción de " + n + " está completa!",
+    rechazada: n => "Tu solicitud para " + n + " no fue aprobada esta vez."
+  };
+  let unread = 0;
+  async function refreshUnread(){
+    if(!session || session.role !== "adoptante" || !API || !API.unreadCount) return;
+    try { unread = await API.unreadCount(session.id); } catch(e) { return; }
+    const btn = document.querySelector('#nav button[data-screen="seguimiento"]');
+    if(btn) btn.innerHTML = "Mis solicitudes" + (unread ? ' <span class="nav-count" aria-label="' + unread + ' novedades">' + unread + "</span>" : "");
+  }
+  async function loadNotifs(){
+    const box = $("my-notifs");
+    box.innerHTML = "";
+    if(!API.myNotifications) return;
+    try {
+      const rows = await API.myNotifications(session.id);
+      if(!rows.length) return;
+      box.innerHTML = '<div class="notif-box" role="status"><h3>🔔 Novedades</h3>' + rows.map(n => {
+        const pet = n.adoption_requests && n.adoption_requests.pets ? n.adoption_requests.pets.name : "tu mascota";
+        const txt = NOTIF_TEXT[n.status] ? NOTIF_TEXT[n.status](pet) : "Tu solicitud cambió de estado.";
+        return '<div class="notif-item">' + esc(txt) + "<small>" + esc(shortDate(n.created_at)) + "</small></div>";
+      }).join("") + "</div>";
+      await API.markNotificationsRead(session.id);
+      await refreshUnread();
+    } catch(e) { /* las novedades son un extra: si fallan, la lista de solicitudes sigue */ }
+  }
+
   async function loadMyRequests(){
+    loadNotifs();
     const box = $("my-requests");
     box.innerHTML = '<p class="loading-msg">Cargando…</p>';
     try {
@@ -1214,7 +1335,7 @@
         "<small>Enviada el " + esc(new Date(r.created_at).toLocaleDateString("es-MX")) + "</small></div>" + reqBadge(r) +
         (isOpen(r.status) ? '<div class="req-actions"><button class="decline" data-cancel="' + esc(r.id) + '">Cancelar</button></div>' : "") +
         (ADOPTED.includes(r.status) ? '<div class="req-actions"><button class="accept" data-care="1">Ver seguimiento</button></div>' : "") + "</div>" +
-        reqTimeline(r) + '<p class="req-hint">' + esc(reqHint(r)) + "</p></div>"
+        reqTimeline(r) + '<p class="req-hint">' + esc(reqHint(r)) + "</p>" + reqNext(r) + "</div>"
       ).join("") : '<p class="list-empty">Todavía no has enviado solicitudes. Explora el catálogo para empezar.</p>';
       box.querySelectorAll("[data-care]").forEach(b => b.addEventListener("click", () => goTo("mismascotas")));
       box.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", async () => {
@@ -1268,6 +1389,7 @@
       reqs.innerHTML = received.length ? received.map(r =>
         '<div class="req-item"><div class="req-info"><b>' + esc(r.adopter_name) + "</b> quiere adoptar a <b>" + esc(r.pets ? r.pets.name : "") + "</b>" +
         "<small>" + esc(r.housing_type || "") + (r.other_pets ? " · Otras mascotas: " + esc(r.other_pets) : "") + (r.message ? " · “" + esc(r.message) + "”" : "") +
+        (r.status === "aceptada" && r.pickup_at ? " · Entrega: " + esc(fullDateTime(r.pickup_at)) : "") +
         (r.status === "periodo_prueba" && r.trial_until ? " · Prueba hasta el " + esc(shortDate(r.trial_until)) : "") + "</small></div>" +
         reqActions(r, "data-id") + "</div>"
       ).join("") : '<p class="list-empty">Todavía no recibes solicitudes.</p>';
@@ -1277,6 +1399,7 @@
       }));
       reqs.querySelectorAll(".req-actions button").forEach(b => b.addEventListener("click", async () => {
         const req = received.find(r => r.id === b.dataset.id);
+        if(b.dataset.st === "aceptada"){ openApproveForm(b.closest(".req-item"), req, loadPanel); return; }
         if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
         try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadPanel(); }
         catch(err){ toast(friendlyError(err)); }
@@ -1345,6 +1468,7 @@
       }).join("") : '<p class="list-empty">Todavía no hay solicitudes de adopción.</p>';
       box.querySelectorAll("[data-areq]").forEach(b => b.addEventListener("click", async () => {
         const req = rows.find(r => r.id === b.dataset.areq);
+        if(b.dataset.st === "aceptada"){ openApproveForm(b.closest(".req-item"), req, loadAdminRequests); return; }
         if(b.dataset.st === "rechazada" && !window.confirm("¿Rechazar esta solicitud?")) return;
         try { await API.respondRequest(req, b.dataset.st); toast(reqToast(b.dataset.st)); await loadAdminRequests(); } catch(err){ toast(friendlyError(err)); }
       }));
