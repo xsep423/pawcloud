@@ -775,6 +775,13 @@
         const r = await sb.auth.getSession();
         return r.data && r.data.session ? profileOf(r.data.session.user.id) : null;
       },
+      // ¿Supabase todavía reconoce la sesión? (getSession renueva el token si hace falta)
+      async hasSession(){
+        const r = await sb.auth.getSession();
+        return !!(r.data && r.data.session);
+      },
+      // Avisa si Supabase cierra la sesión por su cuenta (token vencido que no se pudo renovar)
+      onSignedOut(fn){ sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") fn(); }); },
       async signUp(f){
         const r = await sb.auth.signUp({ email:f.email, password:f.password, options:{ data:{ name:f.name, role:f.role, org_name:f.org || "" } } });
         if(r.error) fail(r.error);
@@ -883,7 +890,9 @@
     if(!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || /^PEGA/.test(cfg.SUPABASE_ANON_KEY)) return null;
     if(!window.supabase) await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js");
     if(!window.supabase) return null;
-    return makeApi(window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY));
+    const api = makeApi(window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY));
+    api.onSignedOut(() => sessionExpired());
+    return api;
   }
 
   /* ====== NAVEGACIÓN ====== */
@@ -895,6 +904,7 @@
   }
 
   async function goTo(id){
+    if(!(await sessionAlive())) return;
     showScreen(id);
     if(id !== "seguimiento") refreshUnread();
     if(id === "catalogo") await loadCatalog();
@@ -1065,8 +1075,29 @@
     await goTo("catalogo");
   }
 
+  /* ====== SESIÓN VENCIDA ====== */
+  let signingOut = false;
+  function sessionExpired(){
+    if(signingOut || !session || session.role === "invitado") return;
+    const tab = "login";
+    session = null; pendingPetId = null;
+    renderNav();
+    goAuth(tab);
+    $("auth-subtitle").textContent = "Tu sesión expiró. Vuelve a iniciar sesión para continuar.";
+    toast("Tu sesión expiró. Vuelve a iniciar sesión.");
+  }
+  // Antes de entrar a una pantalla o enviar algo, confirma que la sesión sigue viva
+  async function sessionAlive(){
+    if(!session || session.role === "invitado" || !API || !API.hasSession) return true;
+    try { if(await API.hasSession()) return true; } catch(e) { return true; }
+    sessionExpired();
+    return false;
+  }
+
   async function endSession(){
+    signingOut = true;
     try { if(API) await API.signOut(); } catch(e) {}
+    signingOut = false;
     session = null; pendingPetId = null; catalog = [];
     renderNav();
     $("login-error").textContent = ""; $("register-error").textContent = ""; recoveryProfile = null;
@@ -1181,6 +1212,7 @@
   async function handleSolicitudCore(){
     const errEl = $("solicitud-error");
     errEl.textContent = "";
+    if(!(await sessionAlive())) return;
     try {
       await API.requestAdoption({
         pet_id: currentPet.id, adopter_id: session.id, adopter_name: $("solicitud-nombre").value.trim(),
@@ -1816,6 +1848,7 @@
     } catch(err){ errEl.textContent = friendlyError(err); }
   }
 
+  document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") sessionAlive(); });
   window.__pawcloudReady = bootSession();
 </script>
 </body>

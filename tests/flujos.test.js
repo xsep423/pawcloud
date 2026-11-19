@@ -775,3 +775,23 @@ test("el adoptante ve la devolución en su línea de tiempo", async () => {
   assert.match(box.textContent, /regresó al refugio/);
   assert.equal(box.querySelector("[data-care]"), null, "ya no lleva seguimiento");
 });
+
+/* ====== Sesión vencida ====== */
+test("si la sesión venció, pide volver a iniciar sesión en vez de fallar", async () => {
+  await register("adoptante", "Valeria", "valeria@correo.com");
+  doc.querySelector('.pet-card[data-id="seed3"]').click();
+  await win.goToSolicitud();
+  api.hasSession = async () => false;   // Supabase ya no reconoce la sesión
+  doc.getElementById("solicitud-ok").checked = true;
+  await win.handleSolicitud(ev);
+  assert.equal(api.db.reqs.length, 0, "no intenta enviar la solicitud");
+  assert.equal(activeScreen(), "auth");
+  assert.equal(doc.getElementById("login-form").style.display, "flex");
+  assert.match(doc.getElementById("auth-subtitle").textContent, /sesión expiró/);
+  assert.deepEqual(navLabels(), []);
+  // al volver a entrar todo sigue normal
+  api.hasSession = async () => true;
+  set("login-email", "valeria@correo.com"); set("login-password", "secreta123");
+  await win.handleLogin(ev);
+  assert.equal(activeScreen(), "catalogo");
+});
